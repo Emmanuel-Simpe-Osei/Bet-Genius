@@ -3,6 +3,9 @@ import { useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { motion, AnimatePresence } from "framer-motion";
 
+const NAVY = "#142B6F";
+const GOLD = "#FFD601";
+
 export default function GameCard({
   game,
   onStatusChange,
@@ -15,7 +18,7 @@ export default function GameCard({
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
-  // 🧮 Update individual match status
+  // Update individual match status
   const handleStatusChange = (index, newStatus) => {
     const updated = matches.map((m, i) =>
       i === index ? { ...m, status: newStatus } : m
@@ -23,7 +26,7 @@ export default function GameCard({
     setMatches(updated);
   };
 
-  // 💾 Save updated matches + total odds
+  // Save updated matches + total odds
   const saveChanges = async () => {
     setSaving(true);
     const { error } = await supabase
@@ -37,267 +40,220 @@ export default function GameCard({
     setSaving(false);
 
     if (error) {
-      if (showToast) {
-        showToast("❌ Failed to update game: " + error.message, "error");
-      } else {
-        alert("❌ Failed to update game: " + error.message);
-      }
-      console.error(error);
+      showToast?.("❌ Failed to update game: " + error.message, "error");
       return;
     }
-
     setEditing(false);
-    if (showToast) {
-      showToast("✅ Game updated successfully!", "success");
-    } else {
-      alert("✅ Game updated successfully!");
-    }
+    showToast?.("✅ Game updated successfully!", "success");
     onStatusChange();
   };
 
-  // 🗑 Delete game card
+  // Delete game card
   const deleteGame = async () => {
     if (!confirm("Are you sure you want to delete this game?")) return;
-
     setDeleting(true);
     const { error } = await supabase.from("games").delete().eq("id", game.id);
     setDeleting(false);
 
     if (error) {
-      if (showToast) {
-        showToast("❌ Delete failed: " + error.message, "error");
-      } else {
-        alert("❌ Delete failed: " + error.message);
-      }
+      showToast?.("❌ Delete failed: " + error.message, "error");
       return;
     }
-
-    if (showToast) {
-      showToast("🗑 Game deleted successfully!", "success");
-    } else {
-      alert("🗑 Game deleted successfully!");
-    }
+    showToast?.("🗑 Game deleted successfully!", "success");
     onDelete();
   };
 
-  // 🎯 Get status color and icon
-  const getStatusStyle = (status) => {
-    const styles = {
-      Won: {
-        bg: "bg-green-100",
-        text: "text-green-800",
-        icon: "✅",
-      },
-      Lost: {
-        bg: "bg-red-100",
-        text: "text-red-800",
-        icon: "❌",
-      },
-      Pending: {
-        bg: "bg-yellow-100",
-        text: "text-yellow-800",
-        icon: "⏳",
-      },
-    };
-    return styles[status] || styles.Pending;
-  };
+  // Status color + icon
+  const statusColor = (status) =>
+    status === "Won"
+      ? "text-green-400"
+      : status === "Lost"
+      ? "text-red-400"
+      : "text-white"; // Pending = white
 
-  // 📊 Calculate win/loss/pending counts
-  const statusCounts = matches.reduce((acc, match) => {
-    acc[match.status] = (acc[match.status] || 0) + 1;
-    return acc;
-  }, {});
+  const statusIcon = (status) =>
+    status === "Won" ? "✅" : status === "Lost" ? "❌" : "⏳";
 
-  // 🔑 Generate unique key for each match
-  const getMatchKey = (match, index) => {
-    // Use eventId if available and unique, otherwise create a composite key
-    if (match.eventId) {
-      return `${match.eventId}-${index}`;
-    }
-    // Fallback: use teams and index to create unique key
-    return `${match.homeTeam}-${match.awayTeam}-${index}`.replace(/\s+/g, "-");
-  };
+  const statusCounts = matches.reduce(
+    (acc, m) => ({ ...acc, [m.status]: (acc[m.status] || 0) + 1 }),
+    { Won: 0, Lost: 0, Pending: 0 }
+  );
+
+  const getMatchKey = (match, i) =>
+    match.eventId
+      ? `${match.eventId}-${i}`
+      : `${match.homeTeam}-${match.awayTeam}-${i}`.replace(/\s+/g, "-");
 
   return (
     <motion.div
       layout
-      initial={{ opacity: 0, scale: 0.9, y: 20 }}
+      initial={{ opacity: 0, scale: 0.96, y: 12 }}
       animate={{ opacity: 1, scale: 1, y: 0 }}
-      exit={{ opacity: 0, scale: 0.9, y: -20 }}
-      whileHover={{
-        y: -2,
-        transition: { duration: 0.2 },
-      }}
-      className="bg-white rounded-xl shadow-md border border-gray-200 overflow-hidden hover:shadow-lg transition-all duration-300"
+      exit={{ opacity: 0, scale: 0.96, y: -12 }}
+      whileHover={{ y: -2 }}
+      className="rounded-2xl overflow-hidden shadow-md hover:shadow-lg transition-all duration-300 border"
+      style={{ backgroundColor: NAVY, color: "#fff", borderColor: `${GOLD}33` }} // 20% opacity
     >
-      {/* 🎯 Compact Header */}
-      <div className="bg-gradient-to-r from-[#002583] to-blue-700 p-3 text-white">
-        <div className="flex justify-between items-center">
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center space-x-2 mb-1">
-              <span className="text-sm font-medium bg-white/20 px-2 py-1 rounded">
-                {game.game_type}
-              </span>
-              <span className="text-blue-100 text-xs">{game.booking_code}</span>
-            </div>
-            <div className="flex items-center justify-between">
-              <div className="text-sm opacity-90">
-                {matches.length} match{matches.length !== 1 ? "es" : ""}
-              </div>
-              <div className="text-right">
-                <div className="text-lg font-bold">₵{game.price || "0"}</div>
-                <div className="text-xs opacity-80">Odds: {totalOdds}</div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* 🎯 Quick Actions Bar */}
-      <div className="px-3 py-2 bg-gray-50 border-b border-gray-100">
-        <div className="flex items-center justify-between">
-          <div className="flex space-x-1">
-            {statusCounts.Won > 0 && (
-              <span className="bg-green-100 text-green-700 px-2 py-1 rounded text-xs">
-                ✅{statusCounts.Won}
-              </span>
-            )}
-            {statusCounts.Lost > 0 && (
-              <span className="bg-red-100 text-red-700 px-2 py-1 rounded text-xs">
-                ❌{statusCounts.Lost}
-              </span>
-            )}
-            {statusCounts.Pending > 0 && (
-              <span className="bg-yellow-100 text-yellow-700 px-2 py-1 rounded text-xs">
-                ⏳{statusCounts.Pending}
-              </span>
-            )}
-          </div>
-
-          <div className="flex items-center space-x-2">
-            {/* Quick Edit Toggle */}
-            <motion.button
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              onClick={() => setEditing(!editing)}
-              className="text-xs bg-white border border-gray-300 px-2 py-1 rounded hover:bg-gray-50 transition-colors"
-            >
-              {editing ? "✕ Cancel" : "✏️ Edit"}
-            </motion.button>
-
-            {/* Quick Actions when editing */}
-            {editing && (
-              <div className="flex space-x-1">
-                <motion.button
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
-                  onClick={saveChanges}
-                  disabled={saving}
-                  className="text-xs bg-green-500 text-white px-2 py-1 rounded disabled:opacity-50 transition-colors"
-                >
-                  {saving ? "💾" : "Save"}
-                </motion.button>
-                <motion.button
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
-                  onClick={deleteGame}
-                  disabled={deleting}
-                  className="text-xs bg-red-500 text-white px-2 py-1 rounded disabled:opacity-50 transition-colors"
-                >
-                  {deleting ? "🗑" : "Delete"}
-                </motion.button>
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* 🏆 Compact Matches List */}
-      <div className="p-3 space-y-2 max-h-60 overflow-y-auto">
-        <AnimatePresence>
-          {matches.map((match, index) => {
-            const statusStyle = getStatusStyle(match.status);
-            return (
-              <motion.div
-                key={getMatchKey(match, index)} // 🔑 Fixed: Using unique key
-                initial={{ opacity: 0, x: -10 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: 10 }}
-                className={`p-2 rounded-lg border ${statusStyle.bg} transition-all duration-200`}
-              >
-                <div className="flex justify-between items-start">
-                  <div className="flex-1 min-w-0">
-                    <div className="text-sm font-medium text-gray-800 truncate">
-                      {match.homeTeam} vs {match.awayTeam}
-                    </div>
-                    <div className="flex items-center space-x-2 mt-1">
-                      {match.league && (
-                        <div className="text-xs text-gray-500 truncate">
-                          {match.league}
-                        </div>
-                      )}
-                      {match.odds && (
-                        <div className="text-xs text-[#002583] font-medium">
-                          {match.odds}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  {editing ? (
-                    <select
-                      value={match.status}
-                      onChange={(e) =>
-                        handleStatusChange(index, e.target.value)
-                      }
-                      className={`ml-2 px-2 py-1 rounded text-xs font-medium ${statusStyle.text} ${statusStyle.bg} border-0 focus:ring-1 focus:ring-opacity-50`}
-                    >
-                      <option value="Pending">⏳</option>
-                      <option value="Won">✅</option>
-                      <option value="Lost">❌</option>
-                    </select>
-                  ) : (
-                    <span
-                      className={`ml-2 px-2 py-1 rounded text-xs font-medium ${statusStyle.text}`}
-                    >
-                      {statusStyle.icon}
-                    </span>
-                  )}
-                </div>
-              </motion.div>
-            );
-          })}
-        </AnimatePresence>
-
-        {/* 📱 Empty Matches State */}
-        {matches.length === 0 && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            className="text-center py-4 text-gray-400"
+      {/* Header */}
+      <div
+        className="p-4 flex justify-between items-start border-b"
+        style={{ borderColor: `${GOLD}33` }}
+      >
+        <div className="space-y-1">
+          <div
+            className="inline-flex items-center px-2 py-1 rounded text-xs font-semibold"
+            style={{ backgroundColor: GOLD, color: NAVY }}
           >
-            <div className="text-lg mb-1">⚽</div>
-            <p className="text-xs">No matches</p>
-          </motion.div>
+            {game.game_type}
+          </div>
+          <div className="text-sm opacity-80">Booking: {game.booking_code}</div>
+        </div>
+        <div className="text-right space-y-1">
+          <div className="text-lg font-bold" style={{ color: GOLD }}>
+            ₵{game.price || "0"}
+          </div>
+          <div className="text-xs opacity-70">Odds: {totalOdds}</div>
+        </div>
+      </div>
+
+      {/* Summary + Actions */}
+      <div
+        className="px-4 py-2 flex items-center justify-between border-b text-xs"
+        style={{ borderColor: `${GOLD}26`, backgroundColor: "#1a308d" }}
+      >
+        <div className="flex gap-4">
+          <span className="flex items-center gap-1 text-green-400">
+            ✅ {statusCounts.Won}
+          </span>
+          <span className="flex items-center gap-1 text-red-400">
+            ❌ {statusCounts.Lost}
+          </span>
+          <span className="flex items-center gap-1 text-white">
+            ⏳ {statusCounts.Pending}
+          </span>
+        </div>
+
+        {!editing ? (
+          <motion.button
+            whileHover={{ scale: 1.04 }}
+            whileTap={{ scale: 0.98 }}
+            className="px-3 py-1 rounded text-xs font-semibold"
+            style={{ backgroundColor: GOLD, color: NAVY }}
+            onClick={() => setEditing(true)}
+          >
+            ✏️ Edit
+          </motion.button>
+        ) : (
+          <div className="flex gap-2">
+            <motion.button
+              whileHover={{ scale: 1.04 }}
+              whileTap={{ scale: 0.98 }}
+              disabled={saving}
+              onClick={saveChanges}
+              className="px-3 py-1 rounded text-xs font-semibold text-white disabled:opacity-60"
+              style={{ backgroundColor: "#22c55e" }} // green-500
+            >
+              {saving ? "Saving..." : "Save"}
+            </motion.button>
+            <motion.button
+              whileHover={{ scale: 1.04 }}
+              whileTap={{ scale: 0.98 }}
+              disabled={deleting}
+              onClick={deleteGame}
+              className="px-3 py-1 rounded text-xs font-semibold text-white disabled:opacity-60"
+              style={{ backgroundColor: "#ef4444" }} // red-500
+            >
+              {deleting ? "..." : "Delete"}
+            </motion.button>
+            <motion.button
+              whileHover={{ scale: 1.04 }}
+              whileTap={{ scale: 0.98 }}
+              onClick={() => setEditing(false)}
+              className="px-3 py-1 rounded text-xs font-semibold"
+              style={{ color: GOLD, borderColor: `${GOLD}66`, borderWidth: 1 }}
+            >
+              Cancel
+            </motion.button>
+          </div>
         )}
       </div>
 
-      {/* 📅 Compact Footer */}
-      <div className="px-3 py-2 bg-gray-50 border-t border-gray-100">
-        <div className="flex justify-between items-center text-xs text-gray-500">
-          <span>{new Date(game.created_at).toLocaleDateString()}</span>
-          <span
-            className={`px-2 py-1 rounded text-xs ${
-              game.status === "won"
-                ? "bg-green-100 text-green-700"
-                : game.status === "lost"
-                ? "bg-red-100 text-red-700"
-                : "bg-yellow-100 text-yellow-700"
-            }`}
+      {/* Matches */}
+      <div className="p-4 space-y-3 max-h-64 overflow-y-auto">
+        <AnimatePresence>
+          {matches.map((match, i) => (
+            <motion.div
+              key={getMatchKey(match, i)}
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -6 }}
+              className="flex items-center justify-between rounded-xl px-3 py-2 transition-all"
+              style={{
+                backgroundColor: "#1a308d",
+                border: `1px solid ${GOLD}1A`, // 10% opacity
+              }}
+            >
+              <div className="text-sm">
+                <p className="font-medium">
+                  {match.homeTeam} vs {match.awayTeam}
+                </p>
+                {match.league && (
+                  <p className="text-xs opacity-70">{match.league}</p>
+                )}
+              </div>
+
+              {editing ? (
+                <select
+                  value={match.status}
+                  onChange={(e) => handleStatusChange(i, e.target.value)}
+                  className="rounded text-xs px-2 py-1"
+                  style={{
+                    backgroundColor: NAVY,
+                    color: "#fff",
+                    border: `1px solid ${GOLD}4D`, // 30%
+                  }}
+                >
+                  <option value="Pending">Pending</option>
+                  <option value="Won">Won</option>
+                  <option value="Lost">Lost</option>
+                </select>
+              ) : (
+                <span className={`text-lg ${statusColor(match.status)}`}>
+                  {statusIcon(match.status)}
+                </span>
+              )}
+            </motion.div>
+          ))}
+        </AnimatePresence>
+
+        {matches.length === 0 && (
+          <p
+            className="text-center text-sm py-4"
+            style={{ color: "#ffffff99" }}
           >
-            {game.status}
-          </span>
-        </div>
+            ⚽ No matches
+          </p>
+        )}
+      </div>
+
+      {/* Footer */}
+      <div
+        className="p-3 flex justify-between items-center text-xs border-t"
+        style={{ borderColor: `${GOLD}26`, color: "#ffffffb3" }}
+      >
+        <span>{new Date(game.created_at).toLocaleDateString()}</span>
+        <span
+          className="px-2 py-1 rounded font-medium"
+          style={
+            game.status === "won"
+              ? { backgroundColor: "#22c55e33", color: "#86efac" } // green-500/20 + green-300
+              : game.status === "lost"
+              ? { backgroundColor: "#ef444433", color: "#fca5a5" } // red-500/20 + red-300
+              : { backgroundColor: "#ffffff1a", color: "#fff" } // pending = white-ish
+          }
+        >
+          {game.status}
+        </span>
       </div>
     </motion.div>
   );
