@@ -8,12 +8,12 @@ export default function FiltersBar({
   setActiveDay,
   hideCustom = false, // 👈 optional prop (default false)
 }) {
-  // ✅ Automatically remove "Custom" from the type tabs if hideCustom = true
+  // ✅ Removed "All" from both filters
   const typeTabs = hideCustom
-    ? ["All", "Free", "VIP", "Correct Score"]
-    : ["All", "Free", "VIP", "Correct Score", "Custom"];
+    ? ["Free", "VIP", "Correct Score"]
+    : ["Free", "VIP", "Correct Score", "Custom"];
 
-  const dayTabs = ["Yesterday", "Today", "Tomorrow", "All"];
+  const dayTabs = ["Yesterday", "Today", "Tomorrow"];
 
   return (
     <div className="space-y-4">

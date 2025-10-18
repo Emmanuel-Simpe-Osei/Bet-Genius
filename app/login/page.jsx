@@ -25,8 +25,9 @@ export default function LoginPage() {
           .select("role")
           .eq("id", data.user.id)
           .single();
+
         if (profile?.role === "admin") router.push("/dashboard");
-        else router.push("/predictions");
+        else router.push("/user-dashboard");
       }
     };
     checkUser();
@@ -62,9 +63,9 @@ export default function LoginPage() {
 
       // 3️⃣ Redirect based on role
       if (profile?.role === "admin") {
-        router.push("/dashboard");
+        router.push("/dashboard"); // Admin dashboard
       } else {
-        router.push("/predictions");
+        router.push("/user-dashboard"); // User dashboard
       }
 
       console.log("✅ Logged in:", data.user.email);

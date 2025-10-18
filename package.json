@@ -9,6 +9,7 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@supabase/auth-helpers-nextjs": "^0.10.0",
     "@supabase/supabase-js": "^2.74.0",
     "@tailwindcss/postcss": "^4.1.14",
     "cheerio": "^1.1.2",
