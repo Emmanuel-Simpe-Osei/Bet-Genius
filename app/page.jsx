@@ -2,20 +2,60 @@
 
 import { motion, AnimatePresence } from "framer-motion";
 import Link from "next/link";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import Navbar from "@/components/Navbar";
 
 export default function HomePage() {
   const heroImages = ["/hero1.jpg", "/hero2.jpg", "/hero3.jpg"];
   const [current, setCurrent] = useState(0);
+  const [news, setNews] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [lastUpdated, setLastUpdated] = useState(null);
+  const refreshRef = useRef(null);
 
-  // ⏱ Automatically switch slides
+  // 🧠 Auto-switch background images
   useEffect(() => {
     const interval = setInterval(() => {
       setCurrent((prev) => (prev + 1) % heroImages.length);
-    }, 5000); // 5s per image
+    }, 6000);
     return () => clearInterval(interval);
   }, [heroImages.length]);
+
+  // 📰 Fetch football news (every 5min)
+  useEffect(() => {
+    let abortCtrl = new AbortController();
+
+    const fetchNews = async () => {
+      try {
+        setLoading(true);
+        const res = await fetch("/api/news", {
+          signal: abortCtrl.signal,
+          headers: { "cache-control": "no-cache" },
+        });
+        const data = await res.json();
+        if (data.articles) setNews(data.articles);
+        setLastUpdated(new Date());
+      } catch (err) {
+        if (err.name !== "AbortError") console.error("News fetch error:", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchNews();
+    refreshRef.current = setInterval(fetchNews, 300000); // 5 minutes
+
+    const onVisible = () => {
+      if (document.visibilityState === "visible") fetchNews();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+
+    return () => {
+      clearInterval(refreshRef.current);
+      document.removeEventListener("visibilitychange", onVisible);
+      abortCtrl.abort();
+    };
+  }, []);
 
   return (
     <div className="min-h-screen bg-[#142B6F] text-white overflow-hidden">
@@ -44,10 +84,8 @@ export default function HomePage() {
           )}
         </AnimatePresence>
 
-        {/* Dark overlay */}
         <div className="absolute inset-0 bg-gradient-to-b from-black/30 via-black/40 to-[#142B6F]/70"></div>
 
-        {/* Text content */}
         <div className="relative z-10 text-center px-6">
           <motion.h2
             initial={{ opacity: 0, y: -20 }}
@@ -89,6 +127,61 @@ export default function HomePage() {
             </Link>
           </motion.div>
         </div>
+      </section>
+
+      {/* 📰 Real Football News Section */}
+      <section id="news" className="py-20 px-6 bg-[#1B308D]">
+        <motion.h3
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5 }}
+          className="text-3xl font-bold text-center text-[#FFD601] mb-2"
+        >
+          📰 Latest Football News
+        </motion.h3>
+        {lastUpdated && (
+          <p className="text-center text-white/60 text-sm mb-8">
+            Last updated: {lastUpdated.toLocaleTimeString()}
+          </p>
+        )}
+
+        {loading ? (
+          <p className="text-center text-white/80">Loading news...</p>
+        ) : news.length > 0 ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8 max-w-6xl mx-auto">
+            {news.map((article, i) => (
+              <motion.a
+                key={i}
+                href={article.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                whileHover={{ scale: 1.03 }}
+                className="bg-[#142B6F]/70 border border-[#FFD601]/20 rounded-2xl overflow-hidden hover:shadow-xl transition-all duration-300"
+              >
+                {article.urlToImage && (
+                  <img
+                    src={article.urlToImage}
+                    alt={article.title}
+                    className="w-full h-48 object-cover"
+                  />
+                )}
+                <div className="p-5">
+                  <h4 className="font-semibold text-lg text-white mb-2 line-clamp-2">
+                    {article.title}
+                  </h4>
+                  <p className="text-sm text-white/80 line-clamp-3 mb-3">
+                    {article.description || "Click to read more..."}
+                  </p>
+                  <span className="text-xs text-white/60">
+                    {new Date(article.publishedAt).toLocaleString()}
+                  </span>
+                </div>
+              </motion.a>
+            ))}
+          </div>
+        ) : (
+          <p className="text-center text-white/70">No football news found.</p>
+        )}
       </section>
 
       {/* ⚽ Leagues Section */}
@@ -152,6 +245,7 @@ export default function HomePage() {
         </div>
       </section>
 
+      {/* ⚫ Footer */}
       <footer className="py-6 border-t border-[#FFD601]/20 text-center text-white/70 text-sm">
         © {new Date().getFullYear()} BetGenius. All rights reserved.
       </footer>
