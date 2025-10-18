@@ -34,7 +34,7 @@ export async function GET() {
         `https://gnews.io/api/v4/search?q=${encodeURIComponent(
           q
         )}&lang=en&max=5&country=gb&apikey=${apiKey}`,
-        { cache: "no-store" }
+        { next: { revalidate: 1800 } } // 1800 seconds = 30 minutes
       );
 
       if (res.ok) {
