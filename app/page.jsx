@@ -113,7 +113,7 @@ export default function HomePage() {
             className="flex gap-4 mt-8 flex-wrap justify-center"
           >
             <a
-              href="https://t.me/YourChannelHere"
+              href="https://t.me/Ozopgh"
               target="_blank"
               className="bg-[#FFD601] text-[#142B6F] px-6 py-3 rounded-xl font-semibold hover:bg-yellow-400 transition"
             >
@@ -236,7 +236,7 @@ export default function HomePage() {
             📧 support@betgenius.com
           </a>
           <a
-            href="https://t.me/YourChannelHere"
+            href="https://t.me/Ozopgh"
             target="_blank"
             className="hover:text-[#FFD601] transition"
           >
