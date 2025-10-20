@@ -67,6 +67,48 @@ export default function GamesPage() {
     setIsClient(true);
   }, []);
 
+  /* ⚙️ Daily Cleanup Logic */
+  useEffect(() => {
+    const cleanupOldGames = async () => {
+      try {
+        const now = new Date();
+        const todayStart = new Date(
+          now.getFullYear(),
+          now.getMonth(),
+          now.getDate()
+        );
+        const yesterdayStart = new Date(todayStart);
+        yesterdayStart.setDate(yesterdayStart.getDate() - 1);
+        const twoDaysAgo = new Date(todayStart);
+        twoDaysAgo.setDate(twoDaysAgo.getDate() - 2);
+
+        // 🟡 1️⃣ Move yesterday’s games to archived
+        const { error: archiveError } = await supabase
+          .from("games")
+          .update({ status: "archived" })
+          .lt("created_at", todayStart.toISOString())
+          .gte("created_at", yesterdayStart.toISOString());
+
+        if (archiveError) throw archiveError;
+
+        // 🔴 2️⃣ Delete games older than 2 days
+        const { error: deleteError } = await supabase
+          .from("games")
+          .delete()
+          .lt("created_at", twoDaysAgo.toISOString());
+
+        if (deleteError) throw deleteError;
+
+        showToast("✅ Old games archived and deleted successfully", "info");
+      } catch (error) {
+        console.error("Cleanup error:", error.message);
+        showToast("⚠️ Error running cleanup: " + error.message, "error");
+      }
+    };
+
+    cleanupOldGames(); // runs automatically when admin visits dashboard
+  }, []);
+
   /* 🎯 Fetch games from Supabase */
   const fetchGames = async () => {
     try {
@@ -74,6 +116,7 @@ export default function GamesPage() {
       const { data, error } = await supabase
         .from("games")
         .select("*")
+        .eq("status", "active") // 🟢 show only active games for now
         .order("created_at", { ascending: false });
 
       if (error) throw error;

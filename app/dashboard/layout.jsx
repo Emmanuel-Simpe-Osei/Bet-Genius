@@ -97,9 +97,11 @@ export default function DashboardLayout({ children }) {
   }, [router]);
 
   /* ✅ Sidebar navigation */
+  /* ✅ Sidebar navigation */
   const navItems = [
     { href: "/dashboard", label: "Dashboard" },
     { href: "/dashboard/games", label: "Games" },
+    { href: "/dashboard/archived", label: "Archived" }, // 🆕 Added Archived page
     { href: "/dashboard/users", label: "Users" },
     { href: "/dashboard/settings", label: "Settings" },
     { href: "/", label: "Home" },
