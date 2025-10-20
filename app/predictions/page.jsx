@@ -5,7 +5,6 @@ import { motion, AnimatePresence } from "framer-motion";
 import { supabase } from "../../lib/supabaseClient";
 import FiltersBar from "../../components/FiltersBar";
 import PredictionCard from "../../components/PredictionCard";
-
 import MessageModal from "../../components/MessageModal"; // ✅ glowing modal
 
 export default function PredictionsPage() {
@@ -13,6 +12,7 @@ export default function PredictionsPage() {
   const [loading, setLoading] = useState(true);
   const [activeType, setActiveType] = useState("All");
   const [activeDay, setActiveDay] = useState("Today");
+  const [selectedDate, setSelectedDate] = useState(null); // ✅ new state
   const [user, setUser] = useState(null);
   const [showModal, setShowModal] = useState(false);
   const [modalMessage, setModalMessage] = useState("");
@@ -52,7 +52,7 @@ export default function PredictionsPage() {
     fetchGames();
   }, []);
 
-  // ✅ Date helpers
+  // ✅ Helper functions
   const startOfDay = (d) =>
     new Date(d.getFullYear(), d.getMonth(), d.getDate());
   const addDays = (d, n) => {
@@ -61,6 +61,7 @@ export default function PredictionsPage() {
     return x;
   };
 
+  // ✅ Date ranges for quick filters
   const dayRanges = useMemo(() => {
     const now = new Date();
     const today = startOfDay(now);
@@ -74,18 +75,28 @@ export default function PredictionsPage() {
     };
   }, []);
 
-  // ✅ Smart filter by type & day
+  // ✅ Smart filtering by type, day, or custom date
   const filtered = useMemo(() => {
-    const [start, end] = dayRanges[activeDay] || dayRanges["All"];
+    let start, end;
+
+    // 📅 If a custom date is selected, filter that exact day
+    if (selectedDate) {
+      const chosen = new Date(selectedDate);
+      start = startOfDay(chosen);
+      end = addDays(start, 1);
+    } else {
+      // Otherwise, use the normal day filter (Yesterday, Today, Tomorrow)
+      [start, end] = dayRanges[activeDay] || dayRanges["All"];
+    }
 
     return games.filter((g) => {
       const created = new Date(g.created_at);
       const type = g.game_type?.toLowerCase();
 
-      // 🎯 Filter by date range
+      // 🎯 Date filter
       if (!(created >= start && created < end)) return false;
 
-      // 🟢 Show all if "All" selected
+      // 🟢 All types
       if (activeType === "All") return true;
 
       // 🧠 Smart type grouping
@@ -99,10 +110,10 @@ export default function PredictionsPage() {
         return type === "free";
       }
 
-      // fallback exact match
+      // fallback
       return type === activeType.toLowerCase();
     });
-  }, [games, activeDay, activeType, dayRanges]);
+  }, [games, activeDay, activeType, dayRanges, selectedDate]);
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-[#0E1D59] to-[#142B6F] text-white">
@@ -134,7 +145,9 @@ export default function PredictionsPage() {
             setActiveType={setActiveType}
             activeDay={activeDay}
             setActiveDay={setActiveDay}
-            hideCustom // 👈 hides “Custom” filter button
+            selectedDate={selectedDate} // 👈 pass date
+            setSelectedDate={setSelectedDate}
+            hideCustom // hides “Custom” filter button
           />
         </div>
 

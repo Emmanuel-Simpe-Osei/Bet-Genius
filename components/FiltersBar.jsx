@@ -1,33 +1,35 @@
 "use client";
 import { motion } from "framer-motion";
+import { useState } from "react";
 
 export default function FiltersBar({
   activeType,
   setActiveType,
   activeDay,
   setActiveDay,
-  hideCustom = false, // 👈 optional prop (default false)
+  hideCustom = false,
+  selectedDate,
+  setSelectedDate, // 👈 new prop for date picker
 }) {
-  // ✅ Tabs shown to the user (Custom tab hidden by default)
+  // ✅ Tabs shown to the user
   const typeTabs = hideCustom
     ? ["Free", "VIP", "Correct Score"]
     : ["Free", "VIP", "Correct Score", "Custom"];
 
   const dayTabs = ["Yesterday", "Today", "Tomorrow"];
 
-  // ✅ Handle clicks — ensures "Custom VIP" & "Custom Correct Score"
-  // still appear under VIP and Correct Score filters
+  // ✅ Handle type selection
   const handleTypeSelect = (tab) => {
-    // Internally normalize tab to handle grouping logic
-    if (tab === "VIP") {
-      // when user selects VIP → also show Custom VIP
-      setActiveType("VIP");
-    } else if (tab === "Correct Score") {
-      // when user selects Correct Score → also show Custom Correct Score
-      setActiveType("Correct Score");
-    } else {
-      setActiveType(tab);
-    }
+    if (tab === "VIP") setActiveType("VIP");
+    else if (tab === "Correct Score") setActiveType("Correct Score");
+    else setActiveType(tab);
+  };
+
+  // ✅ Handle custom date change
+  const handleDateChange = (e) => {
+    const newDate = e.target.value;
+    setSelectedDate(newDate);
+    setActiveDay("Custom"); // highlight that user picked a custom date
   };
 
   return (
@@ -38,7 +40,10 @@ export default function FiltersBar({
           <motion.button
             whileTap={{ scale: 0.95 }}
             key={tab}
-            onClick={() => setActiveDay(tab)}
+            onClick={() => {
+              setActiveDay(tab);
+              setSelectedDate(null); // reset calendar when using preset day
+            }}
             className={`px-4 py-2 rounded-xl border transition-all duration-200 ${
               activeDay === tab
                 ? "bg-[#FFD601] text-[#142B6F] border-[#FFD601] shadow-lg"
@@ -48,6 +53,15 @@ export default function FiltersBar({
             {tab}
           </motion.button>
         ))}
+
+        {/* 📅 Calendar Date Picker */}
+        <motion.input
+          whileTap={{ scale: 0.97 }}
+          type="date"
+          value={selectedDate || ""}
+          onChange={handleDateChange}
+          className="bg-white/5 text-white/90 border border-white/10 hover:bg-white/10 rounded-xl px-3 py-2 outline-none cursor-pointer"
+        />
       </div>
 
       {/* 🎮 Type Filter */}
