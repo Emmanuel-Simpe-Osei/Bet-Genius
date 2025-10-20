@@ -20,20 +20,49 @@ export default function HomePage() {
     return () => clearInterval(interval);
   }, [heroImages.length]);
 
-  // 📰 Fetch football news (every 5min)
+  // 📰 Fetch football news once per session (cache in localStorage)
   useEffect(() => {
     let abortCtrl = new AbortController();
 
-    const fetchNews = async () => {
+    const fetchNews = async (forceRefresh = false) => {
       try {
         setLoading(true);
+
+        // ✅ 1. Try to read cache
+        const cached = localStorage.getItem("cachedNews");
+        const cachedTime = localStorage.getItem("cachedTime");
+
+        // ✅ 2. Check if we can use cached data (less than 30 min old)
+        if (!forceRefresh && cached && cachedTime) {
+          const ageMinutes =
+            (Date.now() - parseInt(cachedTime, 10)) / (1000 * 60);
+          if (ageMinutes < 30) {
+            const parsed = JSON.parse(cached);
+            setNews(parsed);
+            setLastUpdated(new Date(parseInt(cachedTime, 10)));
+            setLoading(false);
+            return; // 💡 skip fetch since cache is still fresh
+          }
+        }
+
+        // ✅ 3. Otherwise, fetch new data
         const res = await fetch("/api/news", {
           signal: abortCtrl.signal,
           headers: { "cache-control": "no-cache" },
         });
+
         const data = await res.json();
-        if (data.articles) setNews(data.articles);
-        setLastUpdated(new Date());
+
+        if (data.articles) {
+          // ✅ Limit to only 5 news cards before saving
+          const topFive = data.articles.slice(0, 5);
+          setNews(topFive);
+          setLastUpdated(new Date());
+
+          // ✅ Save to cache
+          localStorage.setItem("cachedNews", JSON.stringify(topFive));
+          localStorage.setItem("cachedTime", Date.now().toString());
+        }
       } catch (err) {
         if (err.name !== "AbortError") console.error("News fetch error:", err);
       } finally {
@@ -41,9 +70,13 @@ export default function HomePage() {
       }
     };
 
+    // First load — use cache if available
     fetchNews();
-    refreshRef.current = setInterval(fetchNews, 300000); // 5 minutes
 
+    // Optional: auto-refresh every 30 min in background
+    refreshRef.current = setInterval(() => fetchNews(true), 1800000); // 30 min
+
+    // Refetch if user comes back after a while
     const onVisible = () => {
       if (document.visibilityState === "visible") fetchNews();
     };
@@ -80,7 +113,6 @@ export default function HomePage() {
           )}
         </AnimatePresence>
 
-        {/* Gradient overlay */}
         <div className="absolute inset-0 bg-gradient-to-b from-black/30 via-black/40 to-[#142B6F]/80"></div>
 
         <div className="relative z-10 text-center px-4 sm:px-8">
@@ -246,7 +278,6 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* ⚫ Footer */}
       <footer className="py-6 border-t border-[#FFD601]/20 text-center text-white/70 text-sm w-full">
         © {new Date().getFullYear()} BetGenius. All rights reserved.
       </footer>
