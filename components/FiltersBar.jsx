@@ -1,6 +1,9 @@
 "use client";
+
 import { motion } from "framer-motion";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import DatePicker from "react-datepicker";
+import "react-datepicker/dist/react-datepicker.css";
 
 export default function FiltersBar({
   activeType,
@@ -9,28 +12,38 @@ export default function FiltersBar({
   setActiveDay,
   hideCustom = false,
   selectedDate,
-  setSelectedDate, // 👈 new prop for date picker
+  setSelectedDate,
 }) {
-  // ✅ Tabs shown to the user
+  const [mounted, setMounted] = useState(false);
+
+  // ✅ Wait until client mount
+  useEffect(() => setMounted(true), []);
+
   const typeTabs = hideCustom
     ? ["Free", "VIP", "Correct Score"]
     : ["Free", "VIP", "Correct Score", "Custom"];
 
   const dayTabs = ["Yesterday", "Today", "Tomorrow"];
 
-  // ✅ Handle type selection
   const handleTypeSelect = (tab) => {
     if (tab === "VIP") setActiveType("VIP");
     else if (tab === "Correct Score") setActiveType("Correct Score");
     else setActiveType(tab);
   };
 
-  // ✅ Handle custom date change
-  const handleDateChange = (e) => {
-    const newDate = e.target.value;
-    setSelectedDate(newDate);
-    setActiveDay("Custom"); // highlight that user picked a custom date
+  const handleDateChange = (date) => {
+    setSelectedDate(date);
+    setActiveDay("Custom");
   };
+
+  // ✅ Avoid hydration mismatch by skipping SSR render
+  if (!mounted) {
+    return (
+      <div className="text-center text-white/50 py-4 animate-pulse">
+        Loading filters...
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4">
@@ -42,7 +55,7 @@ export default function FiltersBar({
             key={tab}
             onClick={() => {
               setActiveDay(tab);
-              setSelectedDate(null); // reset calendar when using preset day
+              setSelectedDate(null);
             }}
             className={`px-4 py-2 rounded-xl border transition-all duration-200 ${
               activeDay === tab
@@ -54,14 +67,21 @@ export default function FiltersBar({
           </motion.button>
         ))}
 
-        {/* 📅 Calendar Date Picker */}
-        <motion.input
+        {/* 📅 Cross-browser Date Picker */}
+        <motion.div
           whileTap={{ scale: 0.97 }}
-          type="date"
-          value={selectedDate || ""}
-          onChange={handleDateChange}
-          className="bg-white/5 text-white/90 border border-white/10 hover:bg-white/10 rounded-xl px-3 py-2 outline-none cursor-pointer"
-        />
+          className="bg-white/5 text-white/90 border border-white/10 hover:bg-white/10 rounded-xl px-3 py-[6px] cursor-pointer"
+        >
+          <DatePicker
+            selected={selectedDate}
+            onChange={handleDateChange}
+            dateFormat="MM/dd/yyyy"
+            placeholderText="Pick date"
+            className="bg-transparent text-white outline-none w-full"
+            popperClassName="react-datepicker-popper"
+            calendarClassName="!bg-white !text-black rounded-lg p-2 shadow-lg"
+          />
+        </motion.div>
       </div>
 
       {/* 🎮 Type Filter */}

@@ -3,16 +3,26 @@
 import { useEffect, useMemo, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { supabase } from "../../lib/supabaseClient";
-import FiltersBar from "../../components/FiltersBar";
+import dynamic from "next/dynamic"; // ✅ for hydration-safe import
 import PredictionCard from "../../components/PredictionCard";
 import MessageModal from "../../components/MessageModal"; // ✅ glowing modal
+
+// ✅ Dynamically import FiltersBar (avoids hydration mismatch)
+const FiltersBar = dynamic(() => import("../../components/FiltersBar"), {
+  ssr: false, // ❌ disables server-side rendering for it
+  loading: () => (
+    <div className="text-center text-white/50 py-4 animate-pulse">
+      Loading filters...
+    </div>
+  ),
+});
 
 export default function PredictionsPage() {
   const [games, setGames] = useState([]);
   const [loading, setLoading] = useState(true);
   const [activeType, setActiveType] = useState("All");
   const [activeDay, setActiveDay] = useState("Today");
-  const [selectedDate, setSelectedDate] = useState(null); // ✅ new state
+  const [selectedDate, setSelectedDate] = useState(null);
   const [user, setUser] = useState(null);
   const [showModal, setShowModal] = useState(false);
   const [modalMessage, setModalMessage] = useState("");
@@ -52,7 +62,7 @@ export default function PredictionsPage() {
     fetchGames();
   }, []);
 
-  // ✅ Helper functions
+  // ✅ Helpers
   const startOfDay = (d) =>
     new Date(d.getFullYear(), d.getMonth(), d.getDate());
   const addDays = (d, n) => {
@@ -61,7 +71,7 @@ export default function PredictionsPage() {
     return x;
   };
 
-  // ✅ Date ranges for quick filters
+  // ✅ Day ranges
   const dayRanges = useMemo(() => {
     const now = new Date();
     const today = startOfDay(now);
@@ -75,17 +85,15 @@ export default function PredictionsPage() {
     };
   }, []);
 
-  // ✅ Smart filtering by type, day, or custom date
+  // ✅ Filter logic
   const filtered = useMemo(() => {
     let start, end;
 
-    // 📅 If a custom date is selected, filter that exact day
     if (selectedDate) {
       const chosen = new Date(selectedDate);
       start = startOfDay(chosen);
       end = addDays(start, 1);
     } else {
-      // Otherwise, use the normal day filter (Yesterday, Today, Tomorrow)
       [start, end] = dayRanges[activeDay] || dayRanges["All"];
     }
 
@@ -93,33 +101,20 @@ export default function PredictionsPage() {
       const created = new Date(g.created_at);
       const type = g.game_type?.toLowerCase();
 
-      // 🎯 Date filter
       if (!(created >= start && created < end)) return false;
-
-      // 🟢 All types
       if (activeType === "All") return true;
-
-      // 🧠 Smart type grouping
-      if (activeType === "VIP") {
-        return type === "vip" || type === "custom vip";
-      }
-      if (activeType === "Correct Score") {
+      if (activeType === "VIP") return type === "vip" || type === "custom vip";
+      if (activeType === "Correct Score")
         return type === "correct score" || type === "custom correct score";
-      }
-      if (activeType === "Free") {
-        return type === "free";
-      }
+      if (activeType === "Free") return type === "free";
 
-      // fallback
       return type === activeType.toLowerCase();
     });
   }, [games, activeDay, activeType, dayRanges, selectedDate]);
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-[#0E1D59] to-[#142B6F] text-white">
-      {/* 🧭 NavbarClient */}
-
-      {/* ✅ Padding so cards don’t hide behind Navbar */}
+      {/* ✅ Main section */}
       <div className="pt-24 px-6">
         {/* 🧠 Header */}
         <motion.header
@@ -145,16 +140,15 @@ export default function PredictionsPage() {
             setActiveType={setActiveType}
             activeDay={activeDay}
             setActiveDay={setActiveDay}
-            selectedDate={selectedDate} // 👈 pass date
+            selectedDate={selectedDate}
             setSelectedDate={setSelectedDate}
-            hideCustom // hides “Custom” filter button
+            hideCustom
           />
         </div>
 
         {/* 🎯 Predictions Grid */}
         <div className="max-w-6xl mx-auto px-4 pb-16">
           {loading ? (
-            // ⏳ Loading skeletons
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 mt-8">
               {Array.from({ length: 6 }).map((_, i) => (
                 <div
@@ -164,7 +158,6 @@ export default function PredictionsPage() {
               ))}
             </div>
           ) : filtered.length === 0 ? (
-            // 🧐 Empty state
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
@@ -176,7 +169,6 @@ export default function PredictionsPage() {
               </p>
             </motion.div>
           ) : (
-            // ✅ Cards grid
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
@@ -200,7 +192,7 @@ export default function PredictionsPage() {
         </div>
       </div>
 
-      {/* ✨ Glowing gold modal */}
+      {/* ✨ Glowing Modal */}
       <MessageModal
         show={showModal}
         message={modalMessage}
