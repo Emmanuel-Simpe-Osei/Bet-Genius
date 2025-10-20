@@ -27,7 +27,7 @@ export default function ContactPage() {
           </p>
 
           <a
-            href={`https://t.me/${telegramUsername}`}
+            href="https://t.me/Benson_20"
             target="_blank"
             rel="noopener noreferrer"
             className="inline-flex items-center gap-2 bg-[#0088CC] text-white font-semibold px-6 py-3 rounded-lg hover:bg-[#009be3] transition"
