@@ -67,62 +67,53 @@ export default function GamesPage() {
     setIsClient(true);
   }, []);
 
-  /* ⚙️ Daily Cleanup Logic */
-  useEffect(() => {
-    const cleanupOldGames = async () => {
-      try {
-        const now = new Date();
-        const todayStart = new Date(
-          now.getFullYear(),
-          now.getMonth(),
-          now.getDate()
-        );
-        const yesterdayStart = new Date(todayStart);
-        yesterdayStart.setDate(yesterdayStart.getDate() - 1);
-        const twoDaysAgo = new Date(todayStart);
-        twoDaysAgo.setDate(twoDaysAgo.getDate() - 2);
+  /* ⚙️ (Optional) Cleanup Logic — disabled for testing */
+  // useEffect(() => {
+  //   const cleanupOldGames = async () => {
+  //     try {
+  //       const now = new Date();
+  //       const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  //       const yesterdayStart = new Date(todayStart);
+  //       yesterdayStart.setDate(yesterdayStart.getDate() - 1);
+  //       const twoDaysAgo = new Date(todayStart);
+  //       twoDaysAgo.setDate(twoDaysAgo.getDate() - 2);
 
-        // 🟡 1️⃣ Move yesterday’s games to archived
-        const { error: archiveError } = await supabase
-          .from("games")
-          .update({ status: "archived" })
-          .lt("created_at", todayStart.toISOString())
-          .gte("created_at", yesterdayStart.toISOString());
+  //       // 🟡 Move yesterday’s games to archived
+  //       await supabase
+  //         .from("games")
+  //         .update({ status: "archived" })
+  //         .lt("created_at", todayStart.toISOString())
+  //         .gte("created_at", yesterdayStart.toISOString());
 
-        if (archiveError) throw archiveError;
+  //       // 🔴 Delete games older than 2 days
+  //       await supabase.from("games").delete().lt("created_at", twoDaysAgo.toISOString());
+  //     } catch (error) {
+  //       console.error("Cleanup error:", error.message);
+  //     }
+  //   };
 
-        // 🔴 2️⃣ Delete games older than 2 days
-        const { error: deleteError } = await supabase
-          .from("games")
-          .delete()
-          .lt("created_at", twoDaysAgo.toISOString());
+  //   cleanupOldGames();
+  // }, []);
 
-        if (deleteError) throw deleteError;
-
-        showToast("✅ Old games archived and deleted successfully", "info");
-      } catch (error) {
-        console.error("Cleanup error:", error.message);
-        showToast("⚠️ Error running cleanup: " + error.message, "error");
-      }
-    };
-
-    cleanupOldGames(); // runs automatically when admin visits dashboard
-  }, []);
-
-  /* 🎯 Fetch games from Supabase */
+  /* 🎯 Fetch all games (pending + active + archived) */
   const fetchGames = async () => {
     try {
       setIsLoading(true);
       const { data, error } = await supabase
         .from("games")
         .select("*")
-        .eq("status", "active") // 🟢 show only active games for now
+        // ✅ Show all games regardless of status
         .order("created_at", { ascending: false });
 
       if (error) throw error;
+
       setGames(data || []);
-      if (data && data.length > 0)
-        showToast(`${data.length} games loaded successfully`, "success");
+
+      if (data?.length > 0) {
+        showToast(`${data.length} games loaded successfully ✅`, "success");
+      } else {
+        showToast("No games found in the database.", "info");
+      }
     } catch (err) {
       console.error("Error fetching games:", err.message);
       showToast("Failed to load games. Please try again.", "error");
@@ -138,7 +129,9 @@ export default function GamesPage() {
   const filteredGames = games.filter(
     (game) =>
       game.booking_code?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      game.game_type?.toLowerCase().includes(searchTerm.toLowerCase())
+      game.team_a?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      game.team_b?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      game.status?.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   // 🕗 Loading skeleton before hydration
@@ -199,7 +192,7 @@ export default function GamesPage() {
           <div className="relative">
             <input
               type="text"
-              placeholder="Search games by booking code or type..."
+              placeholder="Search games by booking code, teams, or status..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="w-full px-4 py-3 pl-4 rounded-xl border border-gray-300 focus:border-[#FFD601] focus:ring-2 focus:ring-[#FFD601]/30 outline-none transition-all duration-300 bg-white shadow-sm text-gray-800"
