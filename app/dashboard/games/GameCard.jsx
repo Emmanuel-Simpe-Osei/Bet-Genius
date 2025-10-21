@@ -14,11 +14,23 @@ export default function GameCard({
 }) {
   const [editing, setEditing] = useState(false);
   const [matches, setMatches] = useState(game.match_data || []);
-  const [totalOdds, setTotalOdds] = useState(game.total_odds);
+  const [totalOdds, setTotalOdds] = useState(game.total_odds || 0);
+  const [price, setPrice] = useState(game.price || 0);
+  const [gameType, setGameType] = useState(game.game_type || "free");
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
-  // Update individual match status
+  // ✅ Allowed game types (match database constraint)
+  const gameTypes = [
+    { label: "Free", value: "free" },
+    { label: "VIP", value: "vip" },
+    { label: "Correct Score", value: "correct score" },
+    { label: "Custom VIP", value: "custom vip" },
+    { label: "Custom Correct Score", value: "custom correct score" },
+    { label: "Recovery", value: "recovery" },
+  ];
+
+  // 🟡 Update individual match status
   const handleStatusChange = (index, newStatus) => {
     const updated = matches.map((m, i) =>
       i === index ? { ...m, status: newStatus } : m
@@ -26,29 +38,42 @@ export default function GameCard({
     setMatches(updated);
   };
 
-  // Save updated matches + total odds
+  // 💾 Save updated details
   const saveChanges = async () => {
     setSaving(true);
+
+    // ✅ Validate selected game type
+    const validTypes = gameTypes.map((t) => t.value);
+    if (!validTypes.includes(gameType)) {
+      showToast?.("⚠️ Invalid game type selected.", "error");
+      setSaving(false);
+      return;
+    }
+
     const { error } = await supabase
       .from("games")
       .update({
         match_data: matches,
-        total_odds: totalOdds,
+        total_odds: Number(totalOdds),
+        price: Number(price),
+        game_type: gameType.trim().toLowerCase(), // ✅ enforce lowercase
         updated_at: new Date().toISOString(),
       })
       .eq("id", game.id);
+
     setSaving(false);
 
     if (error) {
       showToast?.("❌ Failed to update game: " + error.message, "error");
       return;
     }
+
     setEditing(false);
-    showToast?.("✅ Game updated successfully!", "success");
+    showToast?.(`✅ Game updated successfully!`, "success");
     onStatusChange();
   };
 
-  // Delete game card
+  // 🗑 Delete game
   const deleteGame = async () => {
     if (!confirm("Are you sure you want to delete this game?")) return;
     setDeleting(true);
@@ -63,13 +88,13 @@ export default function GameCard({
     onDelete();
   };
 
-  // Status color + icon
+  // 🎨 Status color + icon
   const statusColor = (status) =>
     status === "Won"
       ? "text-green-400"
       : status === "Lost"
       ? "text-red-400"
-      : "text-white"; // Pending = white
+      : "text-white";
 
   const statusIcon = (status) =>
     status === "Won" ? "✅" : status === "Lost" ? "❌" : "⏳";
@@ -92,31 +117,81 @@ export default function GameCard({
       exit={{ opacity: 0, scale: 0.96, y: -12 }}
       whileHover={{ y: -2 }}
       className="rounded-2xl overflow-hidden shadow-md hover:shadow-lg transition-all duration-300 border"
-      style={{ backgroundColor: NAVY, color: "#fff", borderColor: `${GOLD}33` }} // 20% opacity
+      style={{ backgroundColor: NAVY, color: "#fff", borderColor: `${GOLD}33` }}
     >
-      {/* Header */}
+      {/* 🧩 Header Section */}
       <div
-        className="p-4 flex justify-between items-start border-b"
+        className="p-4 border-b space-y-2"
         style={{ borderColor: `${GOLD}33` }}
       >
-        <div className="space-y-1">
-          <div
-            className="inline-flex items-center px-2 py-1 rounded text-xs font-semibold"
-            style={{ backgroundColor: GOLD, color: NAVY }}
-          >
-            {game.game_type}
+        {!editing ? (
+          <div className="flex justify-between items-start">
+            <div className="space-y-1">
+              <div
+                className="inline-flex items-center px-2 py-1 rounded text-xs font-semibold"
+                style={{ backgroundColor: GOLD, color: NAVY }}
+              >
+                {gameType.charAt(0).toUpperCase() + gameType.slice(1)}
+              </div>
+              <div className="text-sm opacity-80">
+                Booking: {game.booking_code}
+              </div>
+            </div>
+            <div className="text-right space-y-1">
+              <div className="text-lg font-bold" style={{ color: GOLD }}>
+                ₵{price}
+              </div>
+              <div className="text-xs opacity-70">Odds: {totalOdds}</div>
+            </div>
           </div>
-          <div className="text-sm opacity-80">Booking: {game.booking_code}</div>
-        </div>
-        <div className="text-right space-y-1">
-          <div className="text-lg font-bold" style={{ color: GOLD }}>
-            ₵{game.price || "0"}
-          </div>
-          <div className="text-xs opacity-70">Odds: {totalOdds}</div>
-        </div>
+        ) : (
+          <>
+            <div className="grid grid-cols-2 gap-2">
+              {/* 🎯 Game Type Dropdown */}
+              <select
+                value={gameType}
+                onChange={(e) => setGameType(e.target.value)}
+                className="rounded w-full px-2 py-1 text-xs font-semibold border border-[#FFD601] bg-white text-[#142B6F]"
+              >
+                <option value="">-- Select Game Type --</option>
+                {gameTypes.map((type) => (
+                  <option key={type.value} value={type.value}>
+                    {type.label}
+                  </option>
+                ))}
+              </select>
+
+              {/* 💰 Price */}
+              <input
+                type="number"
+                value={price}
+                onChange={(e) => setPrice(e.target.value)}
+                placeholder="Edit Price (₵)"
+                className="rounded w-full px-2 py-1 text-xs text-[#142B6F] font-semibold border border-[#FFD601] placeholder:text-[#FFD601]/80 bg-white"
+              />
+
+              {/* 🎲 Total Odds */}
+              <input
+                type="number"
+                value={totalOdds}
+                onChange={(e) => setTotalOdds(e.target.value)}
+                placeholder="Edit Total Odds"
+                className="rounded w-full px-2 py-1 text-xs text-[#142B6F] font-semibold border border-[#FFD601] placeholder:text-[#FFD601]/80 bg-white"
+              />
+
+              {/* 🔖 Booking Code (Read-only) */}
+              <input
+                type="text"
+                value={game.booking_code}
+                readOnly
+                className="rounded w-full px-2 py-1 text-xs text-[#FFD601]/80 font-semibold border border-[#FFD601]/50 bg-[#1a308d]"
+              />
+            </div>
+          </>
+        )}
       </div>
 
-      {/* Summary + Actions */}
+      {/* ⚙️ Summary + Actions */}
       <div
         className="px-4 py-2 flex items-center justify-between border-b text-xs"
         style={{ borderColor: `${GOLD}26`, backgroundColor: "#1a308d" }}
@@ -151,7 +226,7 @@ export default function GameCard({
               disabled={saving}
               onClick={saveChanges}
               className="px-3 py-1 rounded text-xs font-semibold text-white disabled:opacity-60"
-              style={{ backgroundColor: "#22c55e" }} // green-500
+              style={{ backgroundColor: "#22c55e" }}
             >
               {saving ? "Saving..." : "Save"}
             </motion.button>
@@ -161,7 +236,7 @@ export default function GameCard({
               disabled={deleting}
               onClick={deleteGame}
               className="px-3 py-1 rounded text-xs font-semibold text-white disabled:opacity-60"
-              style={{ backgroundColor: "#ef4444" }} // red-500
+              style={{ backgroundColor: "#ef4444" }}
             >
               {deleting ? "..." : "Delete"}
             </motion.button>
@@ -178,7 +253,7 @@ export default function GameCard({
         )}
       </div>
 
-      {/* Matches */}
+      {/* ⚽ Matches */}
       <div className="p-4 space-y-3 max-h-64 overflow-y-auto">
         <AnimatePresence>
           {matches.map((match, i) => (
@@ -190,7 +265,7 @@ export default function GameCard({
               className="flex items-center justify-between rounded-xl px-3 py-2 transition-all"
               style={{
                 backgroundColor: "#1a308d",
-                border: `1px solid ${GOLD}1A`, // 10% opacity
+                border: `1px solid ${GOLD}1A`,
               }}
             >
               <div className="text-sm">
@@ -210,7 +285,7 @@ export default function GameCard({
                   style={{
                     backgroundColor: NAVY,
                     color: "#fff",
-                    border: `1px solid ${GOLD}4D`, // 30%
+                    border: `1px solid ${GOLD}4D`,
                   }}
                 >
                   <option value="Pending">Pending</option>
@@ -236,7 +311,7 @@ export default function GameCard({
         )}
       </div>
 
-      {/* Footer */}
+      {/* 📅 Footer */}
       <div
         className="p-3 flex justify-between items-center text-xs border-t"
         style={{ borderColor: `${GOLD}26`, color: "#ffffffb3" }}
@@ -246,10 +321,10 @@ export default function GameCard({
           className="px-2 py-1 rounded font-medium"
           style={
             game.status === "won"
-              ? { backgroundColor: "#22c55e33", color: "#86efac" } // green-500/20 + green-300
+              ? { backgroundColor: "#22c55e33", color: "#86efac" }
               : game.status === "lost"
-              ? { backgroundColor: "#ef444433", color: "#fca5a5" } // red-500/20 + red-300
-              : { backgroundColor: "#ffffff1a", color: "#fff" } // pending = white-ish
+              ? { backgroundColor: "#ef444433", color: "#fca5a5" }
+              : { backgroundColor: "#ffffff1a", color: "#fff" }
           }
         >
           {game.status}
