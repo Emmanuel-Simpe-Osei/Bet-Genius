@@ -6,7 +6,7 @@ import GameForm from "./GameForm";
 import GameCard from "./GameCard";
 import { motion, AnimatePresence } from "framer-motion";
 
-/* 🧩 Minimal Toast Component */
+/* 🧩 Toast Component */
 const Toast = ({ message, type = "success", onClose }) => {
   const colors = {
     success: "border-green-500 bg-green-50 text-green-800",
@@ -35,23 +35,19 @@ const Toast = ({ message, type = "success", onClose }) => {
   );
 };
 
-/* 🔔 Custom Toast Hook */
+/* 🔔 Custom Toast Hook (unique keys) */
 const useToast = () => {
   const [toasts, setToasts] = useState([]);
-
+  const makeId = () =>
+    globalThis.crypto?.randomUUID?.() ??
+    `${Date.now()}-${Math.random().toString(36).slice(2)}`;
   const showToast = (message, type = "success", duration = 4000) => {
-    const id = Date.now().toString();
-    const newToast = { id, message, type };
-    setToasts((prev) => [...prev, newToast]);
-
-    if (duration > 0) {
-      setTimeout(() => removeToast(id), duration);
-    }
+    const id = makeId();
+    setToasts((prev) => [...prev, { id, message, type }]);
+    if (duration > 0) setTimeout(() => removeToast(id), duration);
   };
-
   const removeToast = (id) =>
     setToasts((prev) => prev.filter((t) => t.id !== id));
-
   return { toasts, showToast, removeToast };
 };
 
@@ -59,61 +55,96 @@ export default function GamesPage() {
   const [games, setGames] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
-  const { toasts, showToast, removeToast } = useToast();
   const [isClient, setIsClient] = useState(false);
+  const { toasts, showToast, removeToast } = useToast();
 
-  // ✅ Prevent hydration mismatch
+  useEffect(() => setIsClient(true), []);
+
+  // 🔎 helper: all matches resolved (no "Pending")
+  const gameAllResolved = (matchData) => {
+    const matches = Array.isArray(matchData) ? matchData : [];
+    if (matches.length === 0) return false; // nothing to resolve
+    return matches.every((m) => {
+      const s = m?.status?.toLowerCase?.() ?? "";
+      return s === "won" || s === "lost";
+    });
+  };
+
+  /* ⚙️ LIFECYCLE CLEANUP
+     - Auto-archive any game with all matches resolved
+     - Auto-delete any archived game older than 3 days
+  */
   useEffect(() => {
-    setIsClient(true);
+    const cleanupLifecycle = async () => {
+      try {
+        console.log("🧹 Running lifecycle cleanup...");
+
+        // 1) Fetch compact fields for lifecycle checks
+        const { data: allGames, error: fetchError } = await supabase
+          .from("games")
+          .select("id, status, match_data, archived_at");
+        if (fetchError) throw fetchError;
+
+        const now = new Date();
+        const threeDaysAgoISO = new Date(
+          now.getTime() - 3 * 24 * 60 * 60 * 1000
+        ).toISOString();
+
+        // 2) Auto-archive finished games (no pending), stamp archived_at
+        const toArchive = (allGames || []).filter(
+          (g) => g.status !== "archived" && gameAllResolved(g.match_data)
+        );
+
+        if (toArchive.length) {
+          const { error: archErr } = await supabase
+            .from("games")
+            .update({
+              status: "archived",
+              archived_at: new Date().toISOString(),
+            })
+            .in(
+              "id",
+              toArchive.map((g) => g.id)
+            );
+          if (archErr) throw archErr;
+          console.log(`📦 Archived ${toArchive.length} finished game(s).`);
+        }
+
+        // 3) Auto-delete archived games older than 3 days
+        const { error: delErr } = await supabase
+          .from("games")
+          .delete()
+          .lt("archived_at", threeDaysAgoISO)
+          .eq("status", "archived");
+        if (delErr) throw delErr;
+
+        showToast("🧹 Cleanup done: archived + purged old archives", "info");
+        fetchGames(); // refresh list
+      } catch (error) {
+        console.error("Cleanup error:", error.message);
+        showToast("Cleanup failed: " + error.message, "error");
+      }
+    };
+
+    cleanupLifecycle();
   }, []);
 
-  /* ⚙️ (Optional) Cleanup Logic — disabled for testing */
-  // useEffect(() => {
-  //   const cleanupOldGames = async () => {
-  //     try {
-  //       const now = new Date();
-  //       const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  //       const yesterdayStart = new Date(todayStart);
-  //       yesterdayStart.setDate(yesterdayStart.getDate() - 1);
-  //       const twoDaysAgo = new Date(todayStart);
-  //       twoDaysAgo.setDate(twoDaysAgo.getDate() - 2);
-
-  //       // 🟡 Move yesterday’s games to archived
-  //       await supabase
-  //         .from("games")
-  //         .update({ status: "archived" })
-  //         .lt("created_at", todayStart.toISOString())
-  //         .gte("created_at", yesterdayStart.toISOString());
-
-  //       // 🔴 Delete games older than 2 days
-  //       await supabase.from("games").delete().lt("created_at", twoDaysAgo.toISOString());
-  //     } catch (error) {
-  //       console.error("Cleanup error:", error.message);
-  //     }
-  //   };
-
-  //   cleanupOldGames();
-  // }, []);
-
-  /* 🎯 Fetch all games (pending + active + archived) */
+  /* 🎯 Fetch Games (exclude archived from the main list) */
   const fetchGames = async () => {
     try {
       setIsLoading(true);
       const { data, error } = await supabase
         .from("games")
         .select("*")
-        // ✅ Show all games regardless of status
+        .neq("status", "archived")
         .order("created_at", { ascending: false });
 
       if (error) throw error;
-
       setGames(data || []);
 
-      if (data?.length > 0) {
+      if (data?.length > 0)
         showToast(`${data.length} games loaded successfully ✅`, "success");
-      } else {
-        showToast("No games found in the database.", "info");
-      }
+      else showToast("No games found in the database.", "info");
     } catch (err) {
       console.error("Error fetching games:", err.message);
       showToast("Failed to load games. Please try again.", "error");
@@ -126,16 +157,14 @@ export default function GamesPage() {
     fetchGames();
   }, []);
 
-  const filteredGames = games.filter(
-    (game) =>
-      game.booking_code?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      game.team_a?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      game.team_b?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      game.status?.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredGames = games.filter((game) => {
+    const needle = searchTerm.toLowerCase();
+    return [game.booking_code, game.team_a, game.team_b, game.status]
+      .filter(Boolean)
+      .some((f) => f.toLowerCase().includes(needle));
+  });
 
-  // 🕗 Loading skeleton before hydration
-  if (!isClient) {
+  if (!isClient)
     return (
       <div className="min-h-screen bg-[#142B6F]/5 p-6">
         <div className="animate-pulse space-y-6 max-w-6xl mx-auto">
@@ -148,7 +177,6 @@ export default function GamesPage() {
         </div>
       </div>
     );
-  }
 
   return (
     <div className="min-h-screen bg-[#142B6F]/5 p-6">

@@ -8,17 +8,38 @@ export default function UsersPage() {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  // ✅ Fetch users from Supabase "profiles" table
+  // ✅ Fetch users from Supabase "profiles" and enrich with auth metadata fallback
   useEffect(() => {
     const fetchUsers = async () => {
       try {
-        const { data, error } = await supabase
+        // 🔹 1. Fetch all profiles
+        const { data: profiles, error } = await supabase
           .from("profiles")
           .select("id, full_name, email, role, created_at")
           .order("created_at", { ascending: false });
 
         if (error) throw error;
-        setUsers(data);
+
+        // 🔹 2. (Optional) Try to fill missing names from user_metadata
+        const { data: authUsers, error: authError } =
+          await supabase.auth.admin.listUsers();
+
+        if (!authError && authUsers?.users?.length > 0) {
+          const merged = profiles.map((profile) => {
+            if (profile.full_name) return profile; // already has name
+
+            const authUser = authUsers.users.find((u) => u.id === profile.id);
+            const metaName = authUser?.user_metadata?.full_name;
+
+            return {
+              ...profile,
+              full_name: metaName || "Unnamed User",
+            };
+          });
+          setUsers(merged);
+        } else {
+          setUsers(profiles);
+        }
       } catch (err) {
         console.error("Error fetching users:", err.message);
       } finally {

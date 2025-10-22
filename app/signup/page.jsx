@@ -1,9 +1,8 @@
 "use client";
 import useLoading from "@/hooks/useLoading";
-import { safeSupabaseQuery } from "@/lib/apiHelpers";
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { supabase } from "../../lib/supabaseClient";
+import { supabase } from "@/lib/supabaseClient";
 import { motion, AnimatePresence } from "framer-motion";
 import Link from "next/link";
 
@@ -56,7 +55,7 @@ export default function SignUpPage() {
 
     setLoading(true);
     try {
-      // 🟢 Step 1: Sign up user
+      // 🟢 Step 1: Sign up the user
       const { data, error } = await supabase.auth.signUp({
         email: formData.email,
         password: formData.password,
@@ -70,42 +69,30 @@ export default function SignUpPage() {
 
       if (error) throw error;
       const user = data?.user;
+      if (!user) throw new Error("User not created");
 
-      // 🟢 Step 2: Create or update profile record manually
-      if (user) {
-        // Check if profile already exists (avoid duplicates)
-        const { data: existingProfile } = await supabase
-          .from("profiles")
-          .select("id")
-          .eq("id", user.id)
-          .maybeSingle();
+      // 🟢 Step 2: Call secure API to insert profile (bypasses RLS)
+      const res = await fetch("/api/signup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: user.id,
+          email: formData.email,
+          full_name: formData.name,
+          phone: formData.phone,
+        }),
+      });
 
-        if (!existingProfile) {
-          const { error: insertError } = await supabase
-            .from("profiles")
-            .insert([
-              {
-                id: user.id,
-                email: formData.email,
-                full_name: formData.name,
-                phone: formData.phone,
-                role: "user",
-              },
-            ]);
-          if (insertError) {
-            console.error("❌ Profile insert error:", insertError);
-          } else {
-            console.log("✅ Profile inserted successfully for:", formData.name);
-          }
-        } else {
-          console.log("ℹ️ Profile already exists — skipping insert.");
-        }
+      const result = await res.json();
+      if (!result.success) {
+        console.error("❌ API insert failed:", result.error);
+        throw new Error(result.error || "Failed to save profile");
       }
 
-      // 🟢 Step 3: Store name for later welcome toast
+      // 🟢 Step 3: Store name locally for success animation
       sessionStorage.setItem("welcomeName", formData.name);
 
-      // 🟢 Step 4: Success animation & redirect
+      // 🟢 Step 4: Success animation + redirect
       setSuccess(true);
       setTimeout(() => router.push("/predictions"), 2500);
     } catch (err) {
@@ -177,7 +164,7 @@ export default function SignUpPage() {
     );
   }
 
-  // ✅ Main Signup Form (same UI)
+  // ✅ Main Signup Form
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#002583] via-[#1a3a9c] to-[#FFB800] flex items-center justify-center p-4">
       <motion.div
@@ -206,7 +193,6 @@ export default function SignUpPage() {
           <p className="text-white/70">Create your account and get started</p>
         </div>
 
-        {/* Error Message */}
         <AnimatePresence>
           {error && (
             <motion.div
@@ -220,7 +206,6 @@ export default function SignUpPage() {
           )}
         </AnimatePresence>
 
-        {/* Form */}
         <form onSubmit={handleSignUp} className="space-y-5">
           {[
             {
@@ -268,7 +253,6 @@ export default function SignUpPage() {
             </div>
           ))}
 
-          {/* Terms Checkbox */}
           <div className="flex items-start space-x-3 p-3 bg-white/5 rounded-2xl border border-white/10">
             <input
               type="checkbox"
@@ -295,7 +279,6 @@ export default function SignUpPage() {
             </label>
           </div>
 
-          {/* Submit Button */}
           <motion.button
             whileTap={{ scale: 0.97 }}
             type="submit"

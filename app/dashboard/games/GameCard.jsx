@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -19,8 +19,9 @@ export default function GameCard({
   const [gameType, setGameType] = useState(game.game_type || "free");
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [mainStatus, setMainStatus] = useState(game.status || "active");
 
-  // ✅ Allowed game types (match database constraint)
+  // ✅ Allowed game types (enforced lowercase for consistency)
   const gameTypes = [
     { label: "Free", value: "free" },
     { label: "VIP", value: "vip" },
@@ -38,11 +39,10 @@ export default function GameCard({
     setMatches(updated);
   };
 
-  // 💾 Save updated details
+  // 💾 Save changes manually
   const saveChanges = async () => {
     setSaving(true);
 
-    // ✅ Validate selected game type
     const validTypes = gameTypes.map((t) => t.value);
     if (!validTypes.includes(gameType)) {
       showToast?.("⚠️ Invalid game type selected.", "error");
@@ -56,7 +56,7 @@ export default function GameCard({
         match_data: matches,
         total_odds: Number(totalOdds),
         price: Number(price),
-        game_type: gameType.trim().toLowerCase(), // ✅ enforce lowercase
+        game_type: gameType.trim().toLowerCase(),
         updated_at: new Date().toISOString(),
       })
       .eq("id", game.id);
@@ -69,8 +69,8 @@ export default function GameCard({
     }
 
     setEditing(false);
-    showToast?.(`✅ Game updated successfully!`, "success");
-    onStatusChange();
+    showToast?.("✅ Game updated successfully!", "success");
+    onStatusChange?.();
   };
 
   // 🗑 Delete game
@@ -84,8 +84,9 @@ export default function GameCard({
       showToast?.("❌ Delete failed: " + error.message, "error");
       return;
     }
+
     showToast?.("🗑 Game deleted successfully!", "success");
-    onDelete();
+    onDelete?.();
   };
 
   // 🎨 Status color + icon
@@ -104,10 +105,48 @@ export default function GameCard({
     { Won: 0, Lost: 0, Pending: 0 }
   );
 
-  const getMatchKey = (match, i) =>
-    match.eventId
-      ? `${match.eventId}-${i}`
-      : `${match.homeTeam}-${match.awayTeam}-${i}`.replace(/\s+/g, "-");
+  const getMatchKey = (match, i) => {
+    const base =
+      match.eventId ||
+      `${match.homeTeam || "teamA"}-${match.awayTeam || "teamB"}-${i}`;
+    return base.replace(/\s+/g, "-") + "-" + i;
+  };
+
+  // 🧠 Auto-archive when all matches are resolved
+  useEffect(() => {
+    if (!matches.length) return;
+
+    const allResolved = matches.every(
+      (m) =>
+        m.status?.toLowerCase() === "won" || m.status?.toLowerCase() === "lost"
+    );
+    const hasPending = matches.some(
+      (m) => m.status?.toLowerCase() === "pending"
+    );
+
+    if (allResolved && !hasPending && mainStatus !== "archived") {
+      console.log(`📦 Auto-archiving game ${game.booking_code}...`);
+      setMainStatus("archived");
+
+      (async () => {
+        const { error } = await supabase
+          .from("games")
+          .update({
+            status: "archived",
+            archived_at: new Date().toISOString(),
+          })
+          .eq("id", game.id);
+
+        if (error) {
+          console.error("Error updating archive:", error.message);
+          showToast?.("❌ Failed to archive game automatically.", "error");
+        } else {
+          showToast?.("✅ Game archived automatically!", "success");
+          onStatusChange?.();
+        }
+      })();
+    }
+  }, [matches]);
 
   return (
     <motion.div
@@ -145,53 +184,47 @@ export default function GameCard({
             </div>
           </div>
         ) : (
-          <>
-            <div className="grid grid-cols-2 gap-2">
-              {/* 🎯 Game Type Dropdown */}
-              <select
-                value={gameType}
-                onChange={(e) => setGameType(e.target.value)}
-                className="rounded w-full px-2 py-1 text-xs font-semibold border border-[#FFD601] bg-white text-[#142B6F]"
-              >
-                <option value="">-- Select Game Type --</option>
-                {gameTypes.map((type) => (
-                  <option key={type.value} value={type.value}>
-                    {type.label}
-                  </option>
-                ))}
-              </select>
+          <div className="grid grid-cols-2 gap-2">
+            <select
+              value={gameType}
+              onChange={(e) => setGameType(e.target.value)}
+              className="rounded w-full px-2 py-1 text-xs font-semibold border border-[#FFD601] bg-white text-[#142B6F]"
+            >
+              <option value="">-- Select Game Type --</option>
+              {gameTypes.map((type) => (
+                <option key={type.value} value={type.value}>
+                  {type.label}
+                </option>
+              ))}
+            </select>
 
-              {/* 💰 Price */}
-              <input
-                type="number"
-                value={price}
-                onChange={(e) => setPrice(e.target.value)}
-                placeholder="Edit Price (₵)"
-                className="rounded w-full px-2 py-1 text-xs text-[#142B6F] font-semibold border border-[#FFD601] placeholder:text-[#FFD601]/80 bg-white"
-              />
+            <input
+              type="number"
+              value={price}
+              onChange={(e) => setPrice(e.target.value)}
+              placeholder="Edit Price (₵)"
+              className="rounded w-full px-2 py-1 text-xs text-[#142B6F] font-semibold border border-[#FFD601] bg-white"
+            />
 
-              {/* 🎲 Total Odds */}
-              <input
-                type="number"
-                value={totalOdds}
-                onChange={(e) => setTotalOdds(e.target.value)}
-                placeholder="Edit Total Odds"
-                className="rounded w-full px-2 py-1 text-xs text-[#142B6F] font-semibold border border-[#FFD601] placeholder:text-[#FFD601]/80 bg-white"
-              />
+            <input
+              type="number"
+              value={totalOdds}
+              onChange={(e) => setTotalOdds(e.target.value)}
+              placeholder="Edit Total Odds"
+              className="rounded w-full px-2 py-1 text-xs text-[#142B6F] font-semibold border border-[#FFD601] bg-white"
+            />
 
-              {/* 🔖 Booking Code (Read-only) */}
-              <input
-                type="text"
-                value={game.booking_code}
-                readOnly
-                className="rounded w-full px-2 py-1 text-xs text-[#FFD601]/80 font-semibold border border-[#FFD601]/50 bg-[#1a308d]"
-              />
-            </div>
-          </>
+            <input
+              type="text"
+              value={game.booking_code}
+              readOnly
+              className="rounded w-full px-2 py-1 text-xs text-[#FFD601]/80 font-semibold border border-[#FFD601]/50 bg-[#1a308d]"
+            />
+          </div>
         )}
       </div>
 
-      {/* ⚙️ Summary + Actions */}
+      {/* ⚙️ Status Summary + Actions */}
       <div
         className="px-4 py-2 flex items-center justify-between border-b text-xs"
         style={{ borderColor: `${GOLD}26`, backgroundColor: "#1a308d" }}
@@ -253,7 +286,7 @@ export default function GameCard({
         )}
       </div>
 
-      {/* ⚽ Matches */}
+      {/* ⚽ Matches List */}
       <div className="p-4 space-y-3 max-h-64 overflow-y-auto">
         <AnimatePresence>
           {matches.map((match, i) => (
@@ -318,16 +351,16 @@ export default function GameCard({
       >
         <span>{new Date(game.created_at).toLocaleDateString()}</span>
         <span
-          className="px-2 py-1 rounded font-medium"
+          className="px-2 py-1 rounded font-medium capitalize"
           style={
-            game.status === "won"
+            mainStatus === "archived"
               ? { backgroundColor: "#22c55e33", color: "#86efac" }
-              : game.status === "lost"
+              : mainStatus === "lost"
               ? { backgroundColor: "#ef444433", color: "#fca5a5" }
               : { backgroundColor: "#ffffff1a", color: "#fff" }
           }
         >
-          {game.status}
+          {mainStatus}
         </span>
       </div>
     </motion.div>

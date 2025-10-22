@@ -1,6 +1,5 @@
 "use client";
 import useLoading from "@/hooks/useLoading";
-import { safeSupabaseQuery } from "@/lib/apiHelpers";
 import { motion } from "framer-motion";
 import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabaseClient";
@@ -11,27 +10,77 @@ export default function DashboardHome() {
 
   const [dashboardData, setDashboardData] = useState({
     totalUsers: 0,
-    totalPredictions: 0,
+    totalGames: 0,
+    activeGames: 0,
+    archivedGames: 0,
+    autoDeletedGames: 0,
     totalOrders: 0,
     recentOrders: [],
   });
+
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const fetchDashboardData = async () => {
       try {
+        setLoading(true);
+
         // ✅ 1. Total users
         const { count: totalUsers, error: usersError } = await supabase
           .from("profiles")
           .select("*", { count: "exact", head: true });
         if (usersError) throw usersError;
 
-        // ✅ 2. Total predictions
-        const { count: totalPredictions, error: predictionsError } =
-          await supabase
-            .from("predictions")
-            .select("*", { count: "exact", head: true });
-        if (predictionsError) throw predictionsError;
+        // ✅ 2. Fetch all games (we’ll analyze statuses manually)
+        const { data: allGames, error: gamesError } = await supabase
+          .from("games")
+          .select("id, match_data, status, archived_at, created_at");
+        if (gamesError) throw gamesError;
+
+        const now = new Date();
+        const threeDaysAgo = new Date(
+          now.getTime() - 3 * 24 * 60 * 60 * 1000
+        ).toISOString();
+
+        // ✅ Total games
+        const totalGames = allGames.length;
+
+        // ✅ Active = still has at least one pending match
+        const activeGames = allGames.filter((g) =>
+          (g.match_data || []).some(
+            (m) => m.status?.toLowerCase() === "pending"
+          )
+        ).length;
+
+        // ✅ Archived = status = archived and archived_at < 3 days ago
+        const archivedGames = allGames.filter(
+          (g) =>
+            g.status === "archived" &&
+            (!g.archived_at || g.archived_at > threeDaysAgo)
+        ).length;
+
+        // ✅ Auto-deleted = archived more than 3 days ago
+        const autoDeletedCandidates = allGames.filter(
+          (g) => g.status === "archived" && g.archived_at < threeDaysAgo
+        );
+
+        const autoDeletedGames = autoDeletedCandidates.length;
+
+        // 🧹 Auto-delete from DB
+        if (autoDeletedCandidates.length > 0) {
+          const idsToDelete = autoDeletedCandidates.map((g) => g.id);
+          const { error: deleteError } = await supabase
+            .from("games")
+            .delete()
+            .in("id", idsToDelete);
+
+          if (deleteError)
+            console.error("Auto-delete failed:", deleteError.message);
+          else
+            console.log(
+              `🗑️ Auto-deleted ${idsToDelete.length} archived games older than 3 days`
+            );
+        }
 
         // ✅ 3. Total orders
         const { count: totalOrders, error: ordersError } = await supabase
@@ -39,7 +88,7 @@ export default function DashboardHome() {
           .select("*", { count: "exact", head: true });
         if (ordersError) throw ordersError;
 
-        // ✅ 4. Fetch latest 5 orders with user info
+        // ✅ 4. Recent orders
         const { data: recentOrders, error: recentError } = await supabase
           .from("orders")
           .select(
@@ -59,13 +108,15 @@ export default function DashboardHome() {
           )
           .order("created_at", { ascending: false })
           .limit(5);
-
         if (recentError) throw recentError;
 
-        // ✅ Set data
+        // ✅ Update dashboard state
         setDashboardData({
           totalUsers: totalUsers || 0,
-          totalPredictions: totalPredictions || 0,
+          totalGames,
+          activeGames,
+          archivedGames,
+          autoDeletedGames,
           totalOrders: totalOrders || 0,
           recentOrders: recentOrders || [],
         });
@@ -88,8 +139,9 @@ export default function DashboardHome() {
       delay: 0.1,
     },
     {
-      title: "Total Predictions",
-      value: dashboardData.totalPredictions,
+      title: "Total Predictions (All Games)",
+      value: dashboardData.totalGames,
+      sub: `🟢 ${dashboardData.activeGames} active | 🟡 ${dashboardData.archivedGames} archived | 🗑️ ${dashboardData.autoDeletedGames} auto-deleted`,
       bg: "bg-[#FFD601]",
       color: "text-[#142B6F]",
       delay: 0.2,
@@ -144,7 +196,7 @@ export default function DashboardHome() {
         </p>
       </motion.div>
 
-      {/* STATS */}
+      {/* STATS GRID */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         {stats.map((stat) => (
           <motion.div
@@ -159,6 +211,11 @@ export default function DashboardHome() {
             <p className="text-3xl font-bold">
               {loading ? "..." : stat.value.toLocaleString()}
             </p>
+            {stat.sub && (
+              <p className="text-xs opacity-80 mt-1 leading-5">
+                {loading ? "" : stat.sub}
+              </p>
+            )}
           </motion.div>
         ))}
       </div>

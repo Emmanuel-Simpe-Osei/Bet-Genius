@@ -3,15 +3,15 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { motion, AnimatePresence } from "framer-motion";
-import GameCard from "../games/GameCard"; // ✅ reuse same card component
+import GameCard from "../games/GameCard";
 
-const ArchivedPage = () => {
+export default function ArchivedPage() {
   const [archivedGames, setArchivedGames] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [message, setMessage] = useState(null);
 
-  // ✅ Fetch archived games
+  // 🧭 Fetch archived games
   const fetchArchivedGames = async () => {
     try {
       setIsLoading(true);
@@ -19,7 +19,7 @@ const ArchivedPage = () => {
         .from("games")
         .select("*")
         .eq("status", "archived")
-        .order("created_at", { ascending: false });
+        .order("archived_at", { ascending: false });
 
       if (error) throw error;
       setArchivedGames(data || []);
@@ -31,28 +31,32 @@ const ArchivedPage = () => {
     }
   };
 
-  // 🧹 Restore a game
+  // ♻️ Restore archived game
   const restoreGame = async (id) => {
     try {
       const { error } = await supabase
         .from("games")
-        .update({ status: "active" })
+        .update({ status: "active", archived_at: null })
         .eq("id", id);
-
       if (error) throw error;
+
       setMessage("✅ Game restored successfully!");
       fetchArchivedGames();
     } catch (err) {
-      setMessage("⚠️ Failed to restore game.");
       console.error("Restore error:", err.message);
+      setMessage("⚠️ Failed to restore game.");
     }
   };
 
-  // 🗑️ Delete permanently
+  // 🗑️ Permanently delete
   const deleteGame = async (id) => {
+    if (!confirm("Are you sure you want to delete this game permanently?"))
+      return;
+
     try {
       const { error } = await supabase.from("games").delete().eq("id", id);
       if (error) throw error;
+
       setMessage("🗑️ Game deleted permanently.");
       fetchArchivedGames();
     } catch (err) {
@@ -65,15 +69,26 @@ const ArchivedPage = () => {
     fetchArchivedGames();
   }, []);
 
+  // 🔍 Search filter
   const filtered = archivedGames.filter(
     (game) =>
       game.booking_code?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       game.game_type?.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
+  // 🕓 Helper for "time since archived"
+  const timeSinceArchived = (archived_at) => {
+    if (!archived_at) return "Unknown";
+    const diffMs = Date.now() - new Date(archived_at).getTime();
+    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+    if (diffDays < 1) return "Archived today";
+    if (diffDays === 1) return "Archived 1 day ago";
+    return `Archived ${diffDays} days ago`;
+  };
+
   return (
     <div className="min-h-screen bg-[#142B6F]/5 p-6">
-      {/* HEADER */}
+      {/* 🧭 HEADER */}
       <motion.div
         initial={{ opacity: 0, y: -10 }}
         animate={{ opacity: 1, y: 0 }}
@@ -84,11 +99,11 @@ const ArchivedPage = () => {
           Archived Games
         </h1>
         <p className="text-gray-500 text-sm">
-          View and manage games that have been archived automatically.
+          View, restore, or permanently delete automatically archived games.
         </p>
       </motion.div>
 
-      {/* SEARCH */}
+      {/* 🔍 SEARCH */}
       <div className="max-w-md mx-auto mb-6">
         <input
           type="text"
@@ -99,14 +114,18 @@ const ArchivedPage = () => {
         />
       </div>
 
-      {/* STATUS MESSAGE */}
+      {/* 🗨️ STATUS MESSAGE */}
       {message && (
-        <div className="text-center mb-4 text-sm text-gray-700 font-medium">
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          className="text-center mb-4 text-sm text-gray-700 font-medium"
+        >
           {message}
-        </div>
+        </motion.div>
       )}
 
-      {/* GRID */}
+      {/* 🎯 GRID */}
       {isLoading ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
           {[...Array(6)].map((_, i) => (
@@ -121,33 +140,44 @@ const ArchivedPage = () => {
           <p>No archived games found.</p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-          {filtered.map((game) => (
-            <div
-              key={game.id}
-              className="bg-white rounded-2xl shadow p-4 border border-gray-100"
-            >
-              <GameCard game={game} />
-              <div className="flex items-center justify-between mt-4">
-                <button
-                  onClick={() => restoreGame(game.id)}
-                  className="px-3 py-1 rounded-md text-sm bg-green-100 text-green-700 hover:bg-green-200 transition"
-                >
-                  Restore
-                </button>
-                <button
-                  onClick={() => deleteGame(game.id)}
-                  className="px-3 py-1 rounded-md text-sm bg-red-100 text-red-700 hover:bg-red-200 transition"
-                >
-                  Delete
-                </button>
-              </div>
-            </div>
-          ))}
-        </div>
+        <AnimatePresence>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+            {filtered.map((game) => (
+              <motion.div
+                key={game.id}
+                initial={{ opacity: 0, y: 15 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -15 }}
+                transition={{ duration: 0.3 }}
+                className="bg-white rounded-2xl shadow p-4 border border-gray-100 hover:shadow-lg transition-all duration-300"
+              >
+                <GameCard game={game} />
+
+                {/* FOOTER ACTIONS */}
+                <div className="flex items-center justify-between mt-4 border-t pt-3 text-sm">
+                  <span className="text-gray-500 text-xs">
+                    {timeSinceArchived(game.archived_at)}
+                  </span>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => restoreGame(game.id)}
+                      className="px-3 py-1 rounded-md text-sm bg-green-100 text-green-700 hover:bg-green-200 transition"
+                    >
+                      Restore
+                    </button>
+                    <button
+                      onClick={() => deleteGame(game.id)}
+                      className="px-3 py-1 rounded-md text-sm bg-red-100 text-red-700 hover:bg-red-200 transition"
+                    >
+                      Delete
+                    </button>
+                  </div>
+                </div>
+              </motion.div>
+            ))}
+          </div>
+        </AnimatePresence>
       )}
     </div>
   );
-};
-
-export default ArchivedPage;
+}
