@@ -16,12 +16,27 @@ export default function SignUpPage() {
     confirmPassword: "",
     agreeToTerms: false,
   });
+
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
   const [isMounted, setIsMounted] = useState(false);
+  const [networkSlow, setNetworkSlow] = useState(false);
 
-  useEffect(() => setIsMounted(true), []);
+  useEffect(() => {
+    setIsMounted(true);
+
+    // ⚙️ Detect slow network
+    if (navigator.connection) {
+      const conn = navigator.connection;
+      if (
+        conn.effectiveType.includes("2g") ||
+        conn.effectiveType.includes("slow-2g")
+      ) {
+        setNetworkSlow(true);
+      }
+    }
+  }, []);
 
   // ✅ Handle input change
   const handleChange = (e) => {
@@ -55,7 +70,10 @@ export default function SignUpPage() {
 
     setLoading(true);
     try {
-      // 🟢 Step 1: Sign up the user
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 10000); // ⏱ 10s timeout
+
+      // 🟢 Step 1: Supabase signup
       const { data, error } = await supabase.auth.signUp({
         email: formData.email,
         password: formData.password,
@@ -67,11 +85,12 @@ export default function SignUpPage() {
         },
       });
 
+      clearTimeout(timeout);
       if (error) throw error;
       const user = data?.user;
-      if (!user) throw new Error("User not created");
+      if (!user) throw new Error("Account could not be created.");
 
-      // 🟢 Step 2: Call secure API to insert profile (bypasses RLS)
+      // 🟢 Step 2: Insert profile securely
       const res = await fetch("/api/signup", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -84,20 +103,33 @@ export default function SignUpPage() {
       });
 
       const result = await res.json();
-      if (!result.success) {
-        console.error("❌ API insert failed:", result.error);
-        throw new Error(result.error || "Failed to save profile");
-      }
+      if (!result.success)
+        throw new Error(result.error || "Profile creation failed.");
 
-      // 🟢 Step 3: Store name locally for success animation
+      // 🟢 Step 3: Success redirect
       sessionStorage.setItem("welcomeName", formData.name);
-
-      // 🟢 Step 4: Success animation + redirect
       setSuccess(true);
       setTimeout(() => router.push("/predictions"), 2500);
     } catch (err) {
-      console.error("🔥 Sign-up error:", err.message);
-      setError(err.message || "An unexpected error occurred");
+      console.error("Signup Error:", err);
+
+      // ✅ Friendly network-aware messages
+      if (err.name === "AbortError") {
+        setError("Network too slow or unstable. Please try again.");
+      } else if (
+        err.message.includes("Failed to fetch") ||
+        err.message.includes("NetworkError")
+      ) {
+        setError(
+          "Failed to sign up. Please check your internet connection and try again."
+        );
+      } else if (err.message.includes("Timeout")) {
+        setError(
+          "Connection timed out. Please retry when your network improves."
+        );
+      } else {
+        setError("Something went wrong. Please try again later.");
+      }
     } finally {
       setLoading(false);
     }
@@ -135,23 +167,13 @@ export default function SignUpPage() {
             </svg>
           </motion.div>
 
-          <motion.h2
-            initial={{ y: 20, opacity: 0 }}
-            animate={{ y: 0, opacity: 1 }}
-            transition={{ delay: 0.2 }}
-            className="text-3xl font-bold text-white mb-3"
-          >
-            Welcome Aboard, {formData.name.split(" ")[0]}! 🎉
-          </motion.h2>
+          <h2 className="text-3xl font-bold text-white mb-3">
+            Welcome, {formData.name.split(" ")[0]}! 🎉
+          </h2>
 
-          <motion.p
-            initial={{ y: 20, opacity: 0 }}
-            animate={{ y: 0, opacity: 1 }}
-            transition={{ delay: 0.3 }}
-            className="text-white/80 mb-8 text-lg"
-          >
+          <p className="text-white/80 mb-8 text-lg">
             Redirecting you to predictions...
-          </motion.p>
+          </p>
 
           <motion.div
             initial={{ scaleX: 0 }}
@@ -190,7 +212,14 @@ export default function SignUpPage() {
             </svg>
           </div>
           <h1 className="text-3xl font-bold text-white mb-2">Join Us</h1>
-          <p className="text-white/70">Create your account and get started</p>
+          <p className="text-white/70">
+            Create your account and start your predictions journey
+          </p>
+          {networkSlow && (
+            <p className="text-yellow-300 text-xs mt-2">
+              ⚠️ Your connection seems slow. Please wait patiently or reload.
+            </p>
+          )}
         </div>
 
         <AnimatePresence>
@@ -253,6 +282,7 @@ export default function SignUpPage() {
             </div>
           ))}
 
+          {/* ✅ Terms + Ghana Legal Betting Notice */}
           <div className="flex items-start space-x-3 p-3 bg-white/5 rounded-2xl border border-white/10">
             <input
               type="checkbox"
@@ -267,15 +297,11 @@ export default function SignUpPage() {
                 href="/terms"
                 className="text-[#FFB800] font-semibold underline"
               >
-                Terms and Conditions
+                Terms & Conditions
               </Link>{" "}
-              and{" "}
-              <Link
-                href="/privacy"
-                className="text-[#FFB800] font-semibold underline"
-              >
-                Privacy Policy
-              </Link>
+              and confirm that I am at least 18 years old and betting
+              responsibly under the laws of Ghana as regulated by the Gaming
+              Commission.
             </label>
           </div>
 
@@ -298,6 +324,14 @@ export default function SignUpPage() {
             Sign In
           </Link>
         </div>
+
+        {/* 🇬🇭 Responsible Betting Notice */}
+        <p className="text-white/60 text-xs mt-8 text-center leading-relaxed">
+          ⚠️ BetGenius is a registered business operating under Ghana’s Gaming
+          Commission guidelines. Betting can be addictive — please play
+          responsibly. For help, contact the Gaming Commission Ghana helpline:
+          0302 746 682.
+        </p>
       </motion.div>
     </div>
   );
