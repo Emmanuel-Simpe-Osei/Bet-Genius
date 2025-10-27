@@ -37,16 +37,10 @@ async function loadPaystack() {
 }
 
 export default function PredictionCard({ game, user, onShowModal }) {
-  // ------------------------------------------
-  // 🧠 Local component states
-  // ------------------------------------------
   const [revealed, setRevealed] = useState(false);
   const [processing, setProcessing] = useState(false);
   const [owned, setOwned] = useState(false);
 
-  // ------------------------------------------
-  // ⚙️ Normalize game type (friendly display)
-  // ------------------------------------------
   const gameType = game.game_type?.toLowerCase();
   const isFree = gameType === "free";
   const isVip = gameType === "vip" || gameType === "custom vip";
@@ -64,19 +58,29 @@ export default function PredictionCard({ game, user, onShowModal }) {
     ? "Recovery"
     : "Free";
 
-  // ------------------------------------------
-  // 🔍 Check if user already purchased
-  // ------------------------------------------
+  // 🔍 Check if user already purchased (either in orders or purchases)
   useEffect(() => {
     const checkOwnership = async () => {
       if (!user) return;
-      const { data } = await supabase
+      // check orders first
+      const { data: orderData } = await supabase
         .from("orders")
         .select("id")
         .eq("user_id", user.id)
         .eq("game_id", game.id)
+        .eq("status", "paid")
         .maybeSingle();
-      if (data) {
+
+      // then check purchases table
+      const { data: purchaseData } = await supabase
+        .from("purchases")
+        .select("id")
+        .eq("user_id", user.id)
+        .eq("game_id", game.id)
+        .eq("is_purchased", true)
+        .maybeSingle();
+
+      if (orderData || purchaseData) {
         setOwned(true);
         setRevealed(true);
       }
@@ -84,54 +88,38 @@ export default function PredictionCard({ game, user, onShowModal }) {
     checkOwnership();
   }, [user, game.id]);
 
-  // ------------------------------------------
-  // ⚡ Prepare matches safely
-  // ------------------------------------------
   const matches = useMemo(
     () => (Array.isArray(game.match_data) ? game.match_data : []),
     [game.match_data]
   );
 
-  // ------------------------------------------
-  // 📋 Copy booking code
-  // ------------------------------------------
   const copyCode = async (code) => {
     await navigator.clipboard.writeText(code);
     onShowModal?.("📋 Booking code copied — bet responsibly & good luck!");
   };
 
-  // ------------------------------------------
-  // 💳 Paystack Payment Handler
-  // ------------------------------------------
   const handlePurchase = async () => {
     if (!user) return (window.location.href = "/login");
     if (owned) return setRevealed(true);
 
-    // ❌ Handle custom types — slot full
-    if (isCustom) {
+    if (isCustom)
       return onShowModal?.(
         "⚠️ Slot Full — Please wait for the next game drop!"
       );
-    }
-
-    // ❌ Handle recovery type — restricted
-    if (isRecovery) {
+    if (isRecovery)
       return onShowModal?.(
         "🔄 Recovery Game — Only available to users who lost a previous match."
       );
-    }
 
     try {
       setProcessing(true);
       console.log("🚀 Starting Paystack flow...");
-
       const PaystackPop = await loadPaystack();
 
       if (!PaystackPop || typeof PaystackPop.setup !== "function") {
         throw new Error("Paystack not fully initialized — please refresh.");
       }
 
-      // ✅ Payment Success Handler
       const handlePaymentSuccess = (response) => {
         console.log("✅ Paystack payment callback triggered:", response);
         paystackCallback(response);
@@ -139,7 +127,8 @@ export default function PredictionCard({ game, user, onShowModal }) {
 
       const paystackCallback = async (response) => {
         try {
-          const { error } = await supabase.from("orders").insert({
+          // Insert into orders table
+          const { error: orderError } = await supabase.from("orders").insert({
             user_id: user.id,
             game_id: game.id,
             amount: game.price || 0,
@@ -148,7 +137,20 @@ export default function PredictionCard({ game, user, onShowModal }) {
             paystack_ref: response.reference,
           });
 
-          if (error) throw error;
+          if (orderError) throw orderError;
+
+          // ✅ Also insert into purchases table
+          const { error: purchaseError } = await supabase
+            .from("purchases")
+            .insert({
+              user_id: user.id,
+              game_id: game.id,
+              is_purchased: true,
+            });
+
+          if (purchaseError)
+            console.error("⚠️ Purchase insert error:", purchaseError);
+
           setOwned(true);
           setRevealed(true);
           onShowModal?.("✅ Payment successful! Your code is now unlocked.");
@@ -179,9 +181,6 @@ export default function PredictionCard({ game, user, onShowModal }) {
     }
   };
 
-  // ------------------------------------------
-  // 🖼️ UI Layout
-  // ------------------------------------------
   return (
     <motion.div
       layout

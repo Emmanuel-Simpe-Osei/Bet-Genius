@@ -6,7 +6,6 @@ import GameForm from "./GameForm";
 import GameCard from "./GameCard";
 import { motion, AnimatePresence } from "framer-motion";
 
-/* 🧩 Toast Component */
 const Toast = ({ message, type = "success", onClose }) => {
   const colors = {
     success: "border-green-500 bg-green-50 text-green-800",
@@ -14,7 +13,6 @@ const Toast = ({ message, type = "success", onClose }) => {
     warning: "border-yellow-500 bg-yellow-50 text-yellow-800",
     info: "border-blue-500 bg-blue-50 text-blue-800",
   };
-
   return (
     <motion.div
       initial={{ opacity: 0, x: 300 }}
@@ -35,7 +33,6 @@ const Toast = ({ message, type = "success", onClose }) => {
   );
 };
 
-/* 🔔 Custom Toast Hook (unique keys) */
 const useToast = () => {
   const [toasts, setToasts] = useState([]);
   const makeId = () =>
@@ -60,26 +57,18 @@ export default function GamesPage() {
 
   useEffect(() => setIsClient(true), []);
 
-  // 🔎 helper: all matches resolved (no "Pending")
   const gameAllResolved = (matchData) => {
     const matches = Array.isArray(matchData) ? matchData : [];
-    if (matches.length === 0) return false; // nothing to resolve
+    if (matches.length === 0) return false;
     return matches.every((m) => {
       const s = m?.status?.toLowerCase?.() ?? "";
       return s === "won" || s === "lost";
     });
   };
 
-  /* ⚙️ LIFECYCLE CLEANUP
-     - Auto-archive any game with all matches resolved
-     - Auto-delete any archived game older than 3 days
-  */
   useEffect(() => {
     const cleanupLifecycle = async () => {
       try {
-        console.log("🧹 Running lifecycle cleanup...");
-
-        // 1) Fetch compact fields for lifecycle checks
         const { data: allGames, error: fetchError } = await supabase
           .from("games")
           .select("id, status, match_data, archived_at");
@@ -90,7 +79,6 @@ export default function GamesPage() {
           now.getTime() - 3 * 24 * 60 * 60 * 1000
         ).toISOString();
 
-        // 2) Auto-archive finished games (no pending), stamp archived_at
         const toArchive = (allGames || []).filter(
           (g) => g.status !== "archived" && gameAllResolved(g.match_data)
         );
@@ -107,47 +95,43 @@ export default function GamesPage() {
               toArchive.map((g) => g.id)
             );
           if (archErr) throw archErr;
-          console.log(`📦 Archived ${toArchive.length} finished game(s).`);
         }
 
-        // 3) Auto-delete archived games older than 3 days
-        const { error: delErr } = await supabase
+        await supabase
           .from("games")
           .delete()
           .lt("archived_at", threeDaysAgoISO)
           .eq("status", "archived");
-        if (delErr) throw delErr;
 
-        showToast("🧹 Cleanup done: archived + purged old archives", "info");
-        fetchGames(); // refresh list
+        fetchGames();
       } catch (error) {
         console.error("Cleanup error:", error.message);
         showToast("Cleanup failed: " + error.message, "error");
       }
     };
-
     cleanupLifecycle();
   }, []);
 
-  /* 🎯 Fetch Games (exclude archived from the main list) */
   const fetchGames = async () => {
     try {
       setIsLoading(true);
       const { data, error } = await supabase
         .from("games")
-        .select("*")
+        .select(
+          `
+          *,
+          purchases(count)
+        `
+        )
         .neq("status", "archived")
         .order("created_at", { ascending: false });
 
       if (error) throw error;
       setGames(data || []);
-
-      if (data?.length > 0)
-        showToast(`${data.length} games loaded successfully ✅`, "success");
-      else showToast("No games found in the database.", "info");
+      showToast(`${data?.length || 0} games loaded ✅`, "success");
     } catch (err) {
-      console.error("Error fetching games:", err.message);
-      showToast("Failed to load games. Please try again.", "error");
+      console.error(err.message);
+      showToast("Failed to load games.", "error");
     } finally {
       setIsLoading(false);
     }
@@ -180,7 +164,6 @@ export default function GamesPage() {
 
   return (
     <div className="min-h-screen bg-[#142B6F]/5 p-6">
-      {/* 🔔 Toast Container */}
       <div className="fixed top-4 right-4 z-50 space-y-2">
         <AnimatePresence>
           {toasts.map((toast) => (
@@ -200,7 +183,6 @@ export default function GamesPage() {
         transition={{ duration: 0.5 }}
         className="max-w-7xl mx-auto space-y-8"
       >
-        {/* HEADER */}
         <div className="text-center space-y-2">
           <h1 className="text-3xl font-semibold text-[#142B6F]">
             Game Management
@@ -210,26 +192,18 @@ export default function GamesPage() {
           </p>
         </div>
 
-        {/* SEARCH BAR */}
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.2 }}
-          className="max-w-md mx-auto"
-        >
+        <div className="max-w-md mx-auto">
           <div className="relative">
             <input
               type="text"
-              placeholder="Search games by booking code, teams, or status..."
+              placeholder="Search games..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full px-4 py-3 pl-4 rounded-xl border border-gray-300 focus:border-[#FFD601] focus:ring-2 focus:ring-[#FFD601]/30 outline-none transition-all duration-300 bg-white shadow-sm text-gray-800"
-              autoComplete="off"
+              className="w-full px-4 py-3 rounded-xl border border-gray-300 focus:border-[#FFD601] focus:ring-2 focus:ring-[#FFD601]/30 outline-none transition-all duration-300 bg-white shadow-sm text-gray-800"
             />
           </div>
-        </motion.div>
+        </div>
 
-        {/* UPLOAD FORM */}
         <motion.section
           id="game-form"
           initial={{ opacity: 0, y: 10 }}
@@ -240,7 +214,6 @@ export default function GamesPage() {
           <GameForm onGameAdded={fetchGames} showToast={showToast} />
         </motion.section>
 
-        {/* STATUS BAR */}
         <div className="flex flex-wrap items-center justify-between gap-4 text-sm text-gray-600">
           <span>
             Showing {filteredGames.length} of {games.length} games
@@ -252,15 +225,8 @@ export default function GamesPage() {
               <span>Loading games...</span>
             </div>
           )}
-
-          {searchTerm && (
-            <span className="px-3 py-1 bg-[#FFD601]/20 text-[#142B6F] rounded-full font-medium">
-              Searching: “{searchTerm}”
-            </span>
-          )}
         </div>
 
-        {/* GAME GRID */}
         {isLoading ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 mt-4">
             {[...Array(6)].map((_, i) => (
@@ -277,7 +243,7 @@ export default function GamesPage() {
             </h3>
             <p className="text-sm">
               {searchTerm
-                ? `No results for "${searchTerm}". Try another search term.`
+                ? `No results for "${searchTerm}". Try another term.`
                 : "Add your first game using the form above."}
             </p>
           </div>

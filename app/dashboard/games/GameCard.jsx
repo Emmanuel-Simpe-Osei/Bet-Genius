@@ -21,7 +21,28 @@ export default function GameCard({
   const [deleting, setDeleting] = useState(false);
   const [mainStatus, setMainStatus] = useState(game.status || "active");
 
-  // ✅ Allowed game types (enforced lowercase for consistency)
+  // ✅ NEW: Check if this game has been purchased by any user
+  const [isPurchased, setIsPurchased] = useState(false);
+
+  useEffect(() => {
+    const checkIfPurchased = async () => {
+      try {
+        const { data, error } = await supabase
+          .from("purchases")
+          .select("id")
+          .eq("game_id", game.id)
+          .eq("is_purchased", true);
+
+        if (error) throw error;
+        setIsPurchased(data && data.length > 0);
+      } catch (err) {
+        console.error("Error checking purchase:", err.message);
+      }
+    };
+
+    checkIfPurchased();
+  }, [game.id]);
+
   const gameTypes = [
     { label: "Free", value: "free" },
     { label: "VIP", value: "vip" },
@@ -31,7 +52,6 @@ export default function GameCard({
     { label: "Recovery", value: "recovery" },
   ];
 
-  // 🟡 Update individual match status
   const handleStatusChange = (index, newStatus) => {
     const updated = matches.map((m, i) =>
       i === index ? { ...m, status: newStatus } : m
@@ -39,7 +59,6 @@ export default function GameCard({
     setMatches(updated);
   };
 
-  // 💾 Save changes manually
   const saveChanges = async () => {
     setSaving(true);
 
@@ -73,7 +92,6 @@ export default function GameCard({
     onStatusChange?.();
   };
 
-  // 🗑 Delete game
   const deleteGame = async () => {
     if (!confirm("Are you sure you want to delete this game?")) return;
     setDeleting(true);
@@ -89,7 +107,6 @@ export default function GameCard({
     onDelete?.();
   };
 
-  // 🎨 Status color + icon
   const statusColor = (status) =>
     status === "Won"
       ? "text-green-400"
@@ -112,7 +129,6 @@ export default function GameCard({
     return base.replace(/\s+/g, "-") + "-" + i;
   };
 
-  // 🧠 Auto-archive when all matches are resolved
   useEffect(() => {
     if (!matches.length) return;
 
@@ -125,7 +141,6 @@ export default function GameCard({
     );
 
     if (allResolved && !hasPending && mainStatus !== "archived") {
-      console.log(`📦 Auto-archiving game ${game.booking_code}...`);
       setMainStatus("archived");
 
       (async () => {
@@ -155,10 +170,17 @@ export default function GameCard({
       animate={{ opacity: 1, scale: 1, y: 0 }}
       exit={{ opacity: 0, scale: 0.96, y: -12 }}
       whileHover={{ y: -2 }}
-      className="rounded-2xl overflow-hidden shadow-md hover:shadow-lg transition-all duration-300 border"
+      className="relative rounded-2xl overflow-hidden shadow-md hover:shadow-lg transition-all duration-300 border"
       style={{ backgroundColor: NAVY, color: "#fff", borderColor: `${GOLD}33` }}
     >
-      {/* 🧩 Header Section */}
+      {/* ✅ Show tick if game was purchased */}
+      {isPurchased && (
+        <div className="absolute top-2 right-2 bg-green-500 text-white text-xs font-bold px-2 py-1 rounded-full shadow">
+          ✅ Purchased
+        </div>
+      )}
+
+      {/* 🧩 Header */}
       <div
         className="p-4 border-b space-y-2"
         style={{ borderColor: `${GOLD}33` }}
@@ -286,7 +308,7 @@ export default function GameCard({
         )}
       </div>
 
-      {/* ⚽ Matches List */}
+      {/* ⚽ Matches */}
       <div className="p-4 space-y-3 max-h-64 overflow-y-auto">
         <AnimatePresence>
           {matches.map((match, i) => (
